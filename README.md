@@ -4,7 +4,7 @@ Emulador y analizador para aprender a detectar **dispositivos IoT comprometidos*
 
 Nació de un caso real: un TV box genérico con ADB abierto recibía órdenes de un servidor de control y lanzaba inundaciones UDP a terceros desde la IP pública del operador. Aquí queda empaquetado lo aprendido para que otros puedan practicar y revisar sus propias redes.
 
-> **Solo biblioteca estándar de Python 3.8+.** No necesita Wireshark ni instalar nada para probar el laboratorio.
+> **Solo biblioteca estándar de Python 3.8+.** Para probar el emulador y el analizador no hace falta instalar paquetes ni Wireshark. Para capturar tráfico real (modo visita) sí se necesita Wireshark/TShark: ver [Instalación](#instalación).
 
 ## Qué incluye
 
@@ -15,10 +15,31 @@ Nació de un caso real: un TV box genérico con ADB abierto recibía órdenes de
 | **Analizador** (`analyze`) | Lee un `.pcap`/`.pcapng` real o emulado y marca los indicios, con explicación y veredicto. |
 | **Guías** (`docs/`) | Cómo capturar el tráfico de un dispositivo, reglas de ejemplo para MikroTik y un plan de respuesta. |
 
+## Instalación
+
+Funciona en Windows, Linux y macOS. El modo visita (captura con hotspot) está pensado para **Windows**.
+
+| Qué | Para qué | Cómo |
+|---|---|---|
+| **Python 3.8 o superior** | Ejecutar la herramienta (siempre) | [python.org/downloads](https://www.python.org/downloads/). En Windows, marca **"Add Python to PATH"** al instalar. Comprueba con `python --version`. |
+| **Esta herramienta** | El código | En esta página pulsa el botón verde **Code**, luego **Download ZIP**, y descomprime. O con Git: `git clone https://github.com/torvi10997/iot-botnet-lab.git` |
+| **Wireshark con TShark y Npcap** | Solo para capturar tráfico real (`visita`) | [wireshark.org/download](https://www.wireshark.org/download.html). Deja marcado **TShark** y acepta instalar **Npcap**. |
+
+No hay que instalar nada más (no usa `pip`). Abre una terminal **dentro de la carpeta descomprimida** y ejecuta los comandos de abajo. Para capturar, abre la terminal **como administrador**.
+
+Prueba rápida de que todo funciona (no necesita Wireshark):
+
+```bash
+python -m botnet_lab emulate prueba.pcap
+python -m botnet_lab analyze prueba.pcap
+```
+
+Debe terminar con `Veredicto: SOSPECHOSO`.
+
 ## Inicio rápido
 
 ```bash
-git clone https://github.com/torvi10997/iot-botnet-lab.git
+git clone https://github.com/torvi10997/iot-botnet-lab.git   # o descarga el ZIP (ver Instalación)
 cd iot-botnet-lab
 
 # 1) Generar una captura de un dispositivo infectado y otra de uno sano

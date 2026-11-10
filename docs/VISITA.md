@@ -2,12 +2,25 @@
 
 Para visitas donde se sospecha de un TV box, cámara u otro aparato (por ejemplo, tras un aviso de escaneos o ataques desde la IP del cliente).
 
-## Qué necesitas
+## Instalación (una sola vez, en la laptop del técnico)
 
-- Una laptop con **Windows**, WiFi y puerto **Ethernet** (o un adaptador USB-Ethernet).
-- **Python 3.8+** y **Wireshark** instalado con la opción **TShark** marcada.
-- Un cable de red para conectar la laptop al router del cliente (o a tu propia conexión).
-- Permisos de administrador en la laptop para capturar.
+1. **Python 3.8 o superior:** [python.org/downloads](https://www.python.org/downloads/). Marca **"Add Python to PATH"**. Comprueba con `python --version` en una terminal.
+2. **Wireshark:** [wireshark.org/download](https://www.wireshark.org/download.html). Deja marcado **TShark** y acepta instalar **Npcap**. Reinicia la laptop si lo pide.
+3. **La herramienta:** en https://github.com/torvi10997/iot-botnet-lab pulsa **Code**, luego **Download ZIP**, y descomprime (por ejemplo en `C:\iot-botnet-lab`).
+4. **Prueba rápida** (abre una terminal en esa carpeta, sin necesidad de Wireshark):
+
+   ```
+   python -m botnet_lab emulate prueba.pcap
+   python -m botnet_lab analyze prueba.pcap
+   ```
+
+   Debe terminar con `Veredicto: SOSPECHOSO`. Si falla, revisa que Python esté en el PATH.
+
+## Qué necesitas en cada visita
+
+- La laptop con **Windows**, WiFi y puerto **Ethernet** (o adaptador USB-Ethernet).
+- Un cable de red para llegar a internet.
+- Una terminal abierta **como administrador** (clic derecho, "Ejecutar como administrador"), dentro de la carpeta de la herramienta. Sin permisos no se puede capturar.
 
 ## Antes de empezar: avisa al cliente
 
