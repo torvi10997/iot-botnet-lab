@@ -5,3 +5,5 @@ __pycache__/
 *.pcapng
 *.cap
 .venv/
+# Informes de visita: pueden incluir datos del cliente
+informes/

@@ -4,6 +4,7 @@ import sys
 
 from .analyzer import analyze, render_text
 from .emulator import generate
+from .visita import ejecutar as visita
 
 
 def main(argv=None):
@@ -28,7 +29,22 @@ def main(argv=None):
     a.add_argument("--min-secs", type=int, default=5, help="duración mínima en segundos (5)")
     a.add_argument("--json", action="store_true", help="salida JSON")
 
+    v = sub.add_parser("visita", help="asistente para revisar un aparato en casa del cliente")
+    v.add_argument("--interfaz", help="interfaz de captura (por defecto, se detecta el hotspot de Windows)")
+    v.add_argument("--mac", help="MAC del aparato (captura solo su tráfico)")
+    v.add_argument("--minutos", type=float, default=15, help="duración de la captura (15)")
+    v.add_argument("--salida", default="informes", help="carpeta del informe (informes)")
+    v.add_argument("--guardar", action="store_true", help="conservar la captura como evidencia")
+    v.add_argument("--referencia", help="referencia del cliente/visita (opcional)")
+    v.add_argument("--tecnico", help="nombre del técnico (opcional)")
+    v.add_argument("--local-net", action="append", help="red local CIDR (por defecto, rangos privados)")
+    v.add_argument("--sin-preguntas", action="store_true", help="no pedir datos por teclado")
+    v.add_argument("--desde-captura", nargs="+", metavar="PCAP",
+                   help="no capturar: generar el informe de capturas ya existentes")
+
     args = ap.parse_args(argv)
+    if args.cmd == "visita":
+        return visita(args)
     if args.cmd == "emulate":
         n = generate(args.salida, infected=not args.clean, duration=args.duration,
                      flood_pps=args.pps, flood_secs=args.flood_secs, scan=args.scan, seed=args.seed)

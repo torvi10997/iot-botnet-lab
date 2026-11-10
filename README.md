@@ -11,6 +11,7 @@ Nació de un caso real: un TV box genérico con ADB abierto recibía órdenes de
 | Pieza | Para qué sirve |
 |---|---|
 | **Emulador** (`emulate`) | Genera una captura `.pcap` *sintética* de un dispositivo infectado (o sano). No envía tráfico a ninguna red y solo usa IP de documentación (RFC 5737). |
+| **Modo visita** (`visita`) | Asistente para técnicos: captura el tráfico de un aparato en casa del cliente y entrega un informe con semáforo en lenguaje simple. |
 | **Analizador** (`analyze`) | Lee un `.pcap`/`.pcapng` real o emulado y marca los indicios, con explicación y veredicto. |
 | **Guías** (`docs/`) | Cómo capturar el tráfico de un dispositivo, reglas de ejemplo para MikroTik y un plan de respuesta. |
 
@@ -30,7 +31,15 @@ python -m botnet_lab analyze sano.pcap
 
 # 3) Analizar una captura real de tu red (pcap o pcapng)
 python -m botnet_lab analyze mi_captura.pcapng --device 192.168.1.50
+
+# 4) Revisar un aparato en casa de un cliente (necesita Wireshark/TShark)
+python -m botnet_lab visita --minutos 15
+
+# 5) Probar el informe sin capturar nada
+python -m botnet_lab visita --desde-captura infectado.pcap
 ```
+
+Para visitas en campo lee [`docs/VISITA.md`](docs/VISITA.md).
 
 El código de salida es `2` si el veredicto es *sospechoso*, útil para scripts.
 
@@ -84,6 +93,7 @@ Captura solo **redes y dispositivos propios o con autorización expresa** del du
 
 ## Documentación
 
+- [`docs/VISITA.md`](docs/VISITA.md): guía del técnico para revisar un aparato en casa del cliente (modo visita, semáforo, consentimiento).
 - [`docs/CAPTURA.md`](docs/CAPTURA.md): cómo capturar el tráfico de un TV box u otro aparato (hotspot en Windows, tshark).
 - [`docs/MIKROTIK.md`](docs/MIKROTIK.md): reglas de ejemplo para detectar y bloquear en RouterOS 7.
 - [`docs/RESPUESTA.md`](docs/RESPUESTA.md): qué hacer cuando encuentras uno (cliente, ISP, reporte).

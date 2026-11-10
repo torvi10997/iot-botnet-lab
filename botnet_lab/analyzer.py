@@ -9,6 +9,7 @@ Detecta (por cada equipo de la red local):
   SCAN        barrido de muchos destinos/puertos con SYN
 """
 import ipaddress
+import itertools
 import math
 import statistics
 from collections import Counter, defaultdict
@@ -81,6 +82,7 @@ def _episodes(secs, min_secs):
 
 
 def analyze(path, min_pps=200, min_secs=5, local_nets=None, device=None):
+    paths = [path] if isinstance(path, (str, bytes)) or hasattr(path, "__fspath__") else list(path)
     nets = [ipaddress.ip_network(n) for n in (local_nets or DEFAULT_LOCAL)]
     cache = {}
 
@@ -101,7 +103,7 @@ def analyze(path, min_pps=200, min_secs=5, local_nets=None, device=None):
     syns = defaultdict(list)                                          # src -> [(ts, dst, dport)]
     hosts = Counter()
 
-    for p in read_packets(path):
+    for p in itertools.chain.from_iterable(read_packets(x) for x in paths):
         n += 1
         t_first = p.ts if t_first is None else t_first
         t_last = p.ts
@@ -250,7 +252,7 @@ def analyze(path, min_pps=200, min_secs=5, local_nets=None, device=None):
 
     findings.sort(key=lambda f: SEV_ORDER[f.severity])
     return {
-        "summary": {"file": str(path), "packets": n,
+        "summary": {"file": str(paths[0]) if len(paths) == 1 else "%d archivos" % len(paths), "packets": n,
                     "duration_s": round((t_last - t_first), 1) if n else 0,
                     "local_hosts": dict(hosts.most_common(10))},
         "verdict": "sospechoso" if any(f.severity == "alta" for f in findings) else

@@ -87,5 +87,49 @@ class LabTests(unittest.TestCase):
         self.assertAlmostEqual(a[0].ts, frames[0][0], places=3)
 
 
+class VisitaTests(unittest.TestCase):
+    def setUp(self):
+        self.d = tempfile.TemporaryDirectory()
+        self.addCleanup(self.d.cleanup)
+
+    def run_visita(self, pcap):
+        import contextlib
+        import io
+        from botnet_lab.cli import main
+        out = os.path.join(self.d.name, "out")
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = main(["visita", "--desde-captura", pcap, "--salida", out, "--referencia", "Casa <X>"])
+        html = open(os.path.join(out, os.listdir(out)[0]), encoding="utf8").read()
+        return rc, buf.getvalue(), html
+
+    def test_rojo(self):
+        p = os.path.join(self.d.name, "a.pcap")
+        generate(p, infected=True)
+        rc, out, html = self.run_visita(p)
+        self.assertEqual(rc, 2)
+        self.assertIn("ROJO", out)
+        self.assertIn("ROJO", html)
+        self.assertIn("Casa &lt;X&gt;", html)  # el texto libre se escapa
+
+    def test_corto_no_es_verde(self):
+        p = os.path.join(self.d.name, "b.pcap")
+        generate(p, infected=False, duration=120)
+        rc, out, _ = self.run_visita(p)
+        self.assertEqual(rc, 0)
+        self.assertIn("NO CONCLUYENTE", out)
+
+    def test_verde_solo_con_captura_larga(self):
+        p = os.path.join(self.d.name, "c.pcap")
+        generate(p, infected=False, duration=700)
+        rc, out, _ = self.run_visita(p)
+        self.assertIn("VERDE", out)
+
+    def test_sin_trafico_no_es_verde(self):
+        from botnet_lab.informe import semaforo
+        res = {"findings": [], "summary": {"local_hosts": {"192.168.1.5": 10}, "duration_s": 900}}
+        self.assertEqual(semaforo(res), "sin_datos")
+
+
 if __name__ == "__main__":
     unittest.main()
