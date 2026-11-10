@@ -40,8 +40,8 @@ El código de salida es `2` si el veredicto es *sospechoso*, útil para scripts.
 |---|---|---|
 | `UDP_FLOOD` | Inundación UDP sostenida (por defecto ≥ 200 pps durante ≥ 5 s) con casi ninguna respuesta | Es el ataque en sí: tráfico unidireccional hacia un tercero |
 | `C2_ORDER` | Un mensaje pequeño entrante justo antes (≤ 2 s) de que empiece la inundación | Delata al servidor de control que da la orden |
-| `BEACON` | Mensajes pequeños a intervalos regulares hacia un mismo destino | Latido del canal de control (en el caso real: 33 bytes cada 30 s) |
-| `DNS_RANDOM` | Consultas DNS con nombres aleatorios directo a resolvers públicos | Sondeo de dominios del malware o ruido |
+| `BEACON` | Mensajes del mismo tamaño a intervalos regulares hacia un mismo destino (en puertos 80/443 solo informativo) | Latido del canal de control (en el caso real: 33 bytes, en pareja, cada 30 s) |
+| `DNS_RANDOM` | Consultas DNS con etiquetas largas y aleatorias (incluso binarias) directo a resolvers públicos | Sondeo de dominios del malware o ruido |
 | `DNS_BYPASS` | El equipo ignora el DNS del router | Informativo; muchos aparatos lo hacen |
 | `SCAN` | Muchos destinos/puertos distintos con SYN en pocos segundos | Búsqueda de nuevas víctimas |
 
@@ -66,6 +66,10 @@ Veredicto: SOSPECHOSO
 --scan           añade un barrido SYN al puerto 22
 --seed N         semilla para reproducir el mismo escenario
 ```
+
+## Validación
+
+Se contrastó con capturas reales de un TV box infectado (reposo, en ataque y tras restablecer de fábrica): las tres capturas del equipo infectado salen *sospechosas* y la del restablecido, *sin indicios*. Es un solo caso, no un estudio; los umbrales pueden necesitar ajustes con otros equipos. Si lo pruebas con otro dispositivo, abre un issue con tus resultados (anonimizados).
 
 ## Límites (léelos)
 

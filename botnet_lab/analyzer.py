@@ -37,16 +37,34 @@ def _entropy(s):
 
 
 def _qname(payload):
+    """Primera etiqueta del nombre consultado, como bytes crudos (los bots usan etiquetas binarias)."""
     if len(payload) < 13:
         return None
-    i, labels = 12, []
-    while i < len(payload):
-        ln = payload[i]
-        if ln == 0 or ln > 63:
-            break
-        labels.append(payload[i + 1:i + 1 + ln].decode("ascii", "replace"))
-        i += 1 + ln
-    return ".".join(labels) or None
+    ln = payload[12]
+    if ln == 0 or ln > 63:
+        return None
+    return bytes(payload[13:13 + ln])
+
+
+_HOSTCHARS = frozenset(b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_")
+
+
+def _is_random_label(name):
+    """Etiqueta larga que no parece un nombre de host: binaria o de alta entropía."""
+    if not name:
+        return False
+    lab = name
+    if len(lab) < 14:
+        return False
+    odd = sum(1 for b in lab if b not in _HOSTCHARS) / len(lab)
+    return odd >= 0.3 or _entropy(lab) >= 3.3
+
+
+def _show(name):
+    lab = name
+    if all(32 <= b < 127 for b in lab):
+        return lab.decode("ascii")
+    return "%d bytes binarios (%s...)" % (len(lab), lab[:6].hex())
 
 
 def _episodes(secs, min_secs):
@@ -77,7 +95,7 @@ def analyze(path, min_pps=200, min_secs=5, local_nets=None, device=None):
     udp_out = defaultdict(lambda: defaultdict(lambda: [0, 0, None]))  # (src,dst) -> sec -> [pkts, bytes, first_ts]
     dports = defaultdict(Counter)
     udp_in = Counter()                                                # (local, remote) -> paquetes
-    small_out = defaultdict(list)                                     # (src,dst,dport) -> [ts]
+    small_out = defaultdict(list)                                     # (src,dst,dport,plen) -> [ts]
     small_in = defaultdict(list)                                      # local -> [(ts, remote, rport, plen)]
     dns = defaultdict(list)                                           # src -> [(ts, resolver, qname)]
     syns = defaultdict(list)                                          # src -> [(ts, dst, dport)]
@@ -108,7 +126,7 @@ def analyze(path, min_pps=200, min_secs=5, local_nets=None, device=None):
         elif p.proto == 6:
             if src_local and not dst_local:
                 if 1 <= p.plen <= 128:
-                    small_out[(p.src, p.dst, p.dport)].append(p.ts)
+                    small_out[(p.src, p.dst, p.dport, p.plen)].append(p.ts)
                 if p.flags & 0x12 == 0x02:
                     syns[p.src].append((p.ts, p.dst, p.dport))
             elif dst_local and not src_local and 1 <= p.plen <= 300:
@@ -157,12 +175,12 @@ def analyze(path, min_pps=200, min_secs=5, local_nets=None, device=None):
                      "victim": dst, "device": src}))
 
     # ---- latidos periódicos
-    for (src, dst, dport), ts in small_out.items():
+    for (src, dst, dport, plen), ts in small_out.items():
         if not want(src):
             continue
         ev = [ts[0]] if ts else []
-        for t in ts[1:]:
-            if t - ev[-1] > 0.5:
+        for prev, t in zip(ts, ts[1:]):
+            if t - prev > 2.0:  # silencio de más de 2 s: empieza un latido nuevo (puede venir en pareja)
                 ev.append(t)
         if len(ev) < 4:
             continue
@@ -173,12 +191,12 @@ def analyze(path, min_pps=200, min_secs=5, local_nets=None, device=None):
         cv = statistics.pstdev(gaps) / mean
         if cv < 0.2:
             findings.append(Finding(
-                "BEACON", "media",
+                "BEACON", "info" if dport in (80, 443, 8080, 8443) else "media",
                 "Latido periódico %s -> %s:%d" % (src, dst, dport),
-                "%d mensajes pequeños cada %.1f s (variación %.0f%%). Típico de un canal de control; "
+                "%d mensajes de %d bytes cada %.1f s (variación %.0f%%). Típico de un canal de control; "
                 "también lo hacen apps legítimas (notificaciones): confirma el destino con whois/RDAP."
-                % (len(ev), mean, cv * 100),
-                {"src": src, "dst": dst, "dport": dport, "count": len(ev),
+                % (len(ev), plen, mean, cv * 100),
+                {"src": src, "dst": dst, "dport": dport, "bytes": plen, "count": len(ev),
                  "interval_s": round(mean, 2), "cv": round(cv, 3)}))
 
     # ---- DNS
@@ -187,16 +205,15 @@ def analyze(path, min_pps=200, min_secs=5, local_nets=None, device=None):
             continue
         pub = [x for x in q if not is_local(x[1])]
         dur = max(q[-1][0] - q[0][0], 1)
-        rnd_q = [x for x in pub if x[2] and len(x[2].split(".")[0]) >= 14
-                 and _entropy(x[2].split(".")[0]) >= 3.3]
+        rnd_q = [x for x in pub if _is_random_label(x[2])]
         resolvers = Counter(x[1] for x in pub)
         if len(rnd_q) >= 30 and len(rnd_q) / max(len(pub), 1) > 0.3:
             findings.append(Finding(
                 "DNS_RANDOM", "alta",
                 "Consultas DNS con nombres aleatorios desde %s" % src,
-                "%d consultas con etiquetas largas y de alta entropía (ej. %s), ~%.0f/s, directo a %s. "
+                "%d consultas con etiquetas largas y aleatorias (ej. %s), ~%.0f/s, directo a %s. "
                 "Se usa para sondear dominios del malware o mezclar tráfico."
-                % (len(rnd_q), rnd_q[0][2], len(rnd_q) / dur, ", ".join(sorted(resolvers))),
+                % (len(rnd_q), _show(rnd_q[0][2]), len(rnd_q) / dur, ", ".join(sorted(resolvers))),
                 {"src": src, "queries": len(rnd_q), "per_second": round(len(rnd_q) / dur, 1),
                  "resolvers": dict(resolvers)}))
         elif len(pub) >= 0.8 * len(q) and len(pub) >= 100:
@@ -224,6 +241,12 @@ def analyze(path, min_pps=200, min_secs=5, local_nets=None, device=None):
                 "Hasta %d destinos/puertos distintos en 10 s con SYN. Puertos más usados: %s."
                 % (worst, ", ".join("%d (%d)" % x for x in ports)),
                 {"src": src, "distinct_per_10s": worst, "top_ports": ports}))
+
+    controllers = {f.evidence["controller"] for f in findings if f.code == "C2_ORDER"}
+    for f in findings:
+        if f.code == "BEACON" and f.evidence["dst"] in controllers:
+            f.severity = "alta"
+            f.detail += " Es el MISMO servidor que dio las órdenes de ataque."
 
     findings.sort(key=lambda f: SEV_ORDER[f.severity])
     return {

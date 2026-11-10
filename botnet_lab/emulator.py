@@ -21,7 +21,8 @@ BASE_TS = 1700000000.0
 
 
 def _dns_query(name, txid):
-    q = b"".join(bytes([len(l)]) + l.encode() for l in name.split(".")) + b"\0"
+    lab = name if isinstance(name, bytes) else name.encode()
+    q = b"".join(bytes([len(l)]) + l for l in lab.split(b".") if l) + b"\0"
     return struct.pack("!HHHHHH", txid, 0x0100, 1, 0, 0, 0) + q + struct.pack("!HH", 1, 1)
 
 
@@ -56,15 +57,20 @@ def build(infected=True, duration=120, flood_pps=600, flood_secs=15, dns_rate=25
         # --- DNS de nombres aleatorios directo a resolvers públicos (sin usar el router)
         for k in range(int(duration * dns_rate)):
             tt = k / dns_rate + rnd.uniform(0, 0.02)
-            name = "".join(rnd.choice("abcdefghijklmnopqrstuvwxyz0123456789") for _ in range(20)) + ".com"
+            name = bytes(rnd.choice([c for c in range(1, 256) if c != 0x2E]) for _ in range(20))  # 20 bytes binarios, como el caso real
             r = RESOLVERS[k % len(RESOLVERS)]
             out(tt, r, 17, udp_segment(DEV_IP, r, 30000 + rnd.randrange(9000), 53,
                                        _dns_query(name, rnd.getrandbits(16))))
         # --- canal de control: latido de 33 bytes y respuesta vacía
         tt = 2.0
         while tt < duration:
-            out(tt, C2_IP, 6, tcp_segment(DEV_IP, C2_IP, 51000, C2_PORT, ACK | PSH, blob[:33]))
-            inn(tt + 0.05, C2_IP, 6, tcp_segment(C2_IP, DEV_IP, C2_PORT, 51000, ACK))
+            for dt in (0.0, 0.6):  # el latido se manda en pareja
+                out(tt + dt, C2_IP, 6, tcp_segment(DEV_IP, C2_IP, 51000, C2_PORT, ACK | PSH, blob[:33]))
+                inn(tt + dt + 0.05, C2_IP, 6, tcp_segment(C2_IP, DEV_IP, C2_PORT, 51000, ACK))
+            # mensajes de otros tamaños mezclados, que no deben confundir al detector
+            if rnd.random() < 0.3:  # irregular, como en el caso real
+                out(tt + rnd.uniform(2.5, beacon_every - 1), C2_IP, 6,
+                    tcp_segment(DEV_IP, C2_IP, 51000, C2_PORT, ACK | PSH, blob[:38]))
             tt += beacon_every
         # --- órdenes (54-57 bytes) seguidas de una inundación UDP sin respuesta
         for i, (ip, port, size) in enumerate(TARGETS):

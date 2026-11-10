@@ -44,6 +44,17 @@ class LabTests(unittest.TestCase):
         self.assertEqual([f for f in res["findings"] if f["severity"] != "info"], [])
         self.assertEqual(res["verdict"], "sin indicios")
 
+    def test_dns_binary_labels_and_paired_heartbeat(self):
+        """Caso real: etiquetas DNS de 20 bytes binarios y latido en pareja cada ~30 s."""
+        p = self.path("real.pcap")
+        generate(p, infected=True, beacon_every=30, duration=240)
+        res = analyze(p)
+        beacon = [f for f in res["findings"] if f["code"] == "BEACON"]
+        self.assertEqual(len(beacon), 1)  # solo el canal de 33 bytes, no el ruido de 38
+        self.assertEqual(beacon[0]["evidence"]["bytes"], 33)
+        self.assertEqual(beacon[0]["severity"], "alta")  # mismo servidor que dio las ordenes
+        self.assertIn("DNS_RANDOM", codes(res))
+
     def test_scan(self):
         p = self.path("scan.pcap")
         generate(p, infected=True, scan=True)
