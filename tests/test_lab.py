@@ -1,0 +1,80 @@
+import os
+import struct
+import sys
+import tempfile
+import unittest
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
+from botnet_lab.analyzer import analyze  # noqa: E402
+from botnet_lab.emulator import build, generate  # noqa: E402
+from botnet_lab.pcapio import read_packets  # noqa: E402
+
+
+def codes(res):
+    return [f["code"] for f in res["findings"]]
+
+
+class LabTests(unittest.TestCase):
+    def setUp(self):
+        self.d = tempfile.TemporaryDirectory()
+        self.addCleanup(self.d.cleanup)
+
+    def path(self, name):
+        return os.path.join(self.d.name, name)
+
+    def test_infected_is_detected(self):
+        p = self.path("inf.pcap")
+        generate(p, infected=True)
+        res = analyze(p)
+        c = codes(res)
+        self.assertEqual(c.count("UDP_FLOOD"), 3)
+        self.assertEqual(c.count("C2_ORDER"), 3)
+        self.assertIn("BEACON", c)
+        self.assertIn("DNS_RANDOM", c)
+        self.assertEqual(res["verdict"], "sospechoso")
+        order = [f for f in res["findings"] if f["code"] == "C2_ORDER"][0]
+        self.assertEqual(order["evidence"]["controller"], "198.51.100.10")
+        self.assertLess(order["evidence"]["delay_s"], 0.5)
+
+    def test_clean_has_no_findings(self):
+        p = self.path("clean.pcap")
+        generate(p, infected=False)
+        res = analyze(p)
+        self.assertEqual([f for f in res["findings"] if f["severity"] != "info"], [])
+        self.assertEqual(res["verdict"], "sin indicios")
+
+    def test_scan(self):
+        p = self.path("scan.pcap")
+        generate(p, infected=True, scan=True)
+        self.assertIn("SCAN", codes(analyze(p)))
+
+    def test_thresholds_respected(self):
+        p = self.path("low.pcap")
+        generate(p, infected=True, flood_pps=100)
+        self.assertNotIn("UDP_FLOOD", codes(analyze(p)))
+
+    def test_pcapng_reader(self):
+        """Convierte el escenario a pcapng mínimo y comprueba que se lee igual."""
+        frames = sorted(build(infected=False, duration=10), key=lambda x: x[0])
+        p = self.path("x.pcapng")
+
+        def block(t, body):
+            ln = 12 + len(body)
+            return struct.pack("<II", t, ln) + body + struct.pack("<I", ln)
+
+        with open(p, "wb") as f:
+            f.write(block(0x0A0D0D0A, struct.pack("<IHHq", 0x1A2B3C4D, 1, 0, -1)))
+            f.write(block(1, struct.pack("<HHI", 1, 0, 0)))
+            for ts, data in frames:
+                us = int(round(ts * 1e6))
+                pad = (-len(data)) % 4
+                body = struct.pack("<IIIII", 0, us >> 32, us & 0xFFFFFFFF, len(data), len(data))
+                f.write(block(6, body + data + b"\0" * pad))
+        a = list(read_packets(p))
+        self.assertEqual(len(a), len(frames))
+        self.assertAlmostEqual(a[0].ts, frames[0][0], places=3)
+
+
+if __name__ == "__main__":
+    unittest.main()

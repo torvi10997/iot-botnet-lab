@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+# Capturas: pueden contener IP, MAC y datos personales. No subir.
+*.pcap
+*.pcapng
+*.cap
+.venv/
