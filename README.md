@@ -159,6 +159,7 @@ Los umbrales se ajustan con `--min-pps`, `--min-secs` y `--local-net`.
 - **No es un antivirus ni un sistema de detección de intrusos.** Un *verde* significa «no se vieron señales en este tiempo», no «está limpio»: un dispositivo infectado puede estar callado un buen rato. Por eso la herramienta nunca da verde con menos de 10 minutos de captura.
 - **Un solo caso real de calibración** (un TV box genérico infectado y un teléfono sano). Con otros dispositivos pueden aparecer falsos positivos o pasar algo por alto. Si lo pruebas, abre un *issue* con tus resultados anonimizados.
 - Solo **IPv4** (TCP, UDP e ICMP). No detecta inundaciones ACK/RST ni de aplicación sobre HTTPS, ni minería de criptomonedas. Un dispositivo hecho para evadir (tráfico muy bajo y lento) puede no ser detectado.
+- Las capturas `.pcap`/`.pcapng` se leen si son Ethernet (con una etiqueta VLAN como máximo), Linux cooked o IP crudo. **Una captura de un router con PPPoE o con doble VLAN (QinQ) no se lee** y la app mostrará 0 dispositivos; hoy no está soportado. El hotspot de Windows no tiene este límite.
 - La captura en vivo con hotspot es para **Windows**; el análisis de capturas funciona en cualquier sistema con Python.
 - **Captura únicamente redes y dispositivos propios o con autorización expresa** de su dueño, y avísale antes. No publiques capturas ni informes reales sin quitar IP, MAC y datos personales.
 
