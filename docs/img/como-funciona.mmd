@@ -1,0 +1,9 @@
+flowchart LR
+    D["Dispositivo<br/>TV box, cámara, teléfono"] -- WiFi --> H["Tu laptop<br/>hotspot de Windows"]
+    H -- cable de red --> I(("Internet"))
+    H -. copia de los paquetes .-> T["TShark + Npcap"]
+    T --> A["Revisor de red<br/>agrupa, explica y analiza"]
+    R["Captura del router<br/>(.pcap / .pcapng)"] -. o abrir archivo .-> A
+    A --> S{{"Semáforo"}}
+    A --> P["Puertos abiertos"]
+    A --> F["Informe para el cliente"]

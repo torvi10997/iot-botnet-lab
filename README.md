@@ -58,17 +58,10 @@ Este proyecto nació de un caso real: un TV box con la depuración ADB abierta l
 
 ## Cómo funciona
 
-```mermaid
-flowchart LR
-    D["Dispositivo<br/>TV box, cámara, teléfono"] -- WiFi --> H["Tu laptop<br/>hotspot de Windows"]
-    H -- cable de red --> I(("Internet"))
-    H -. copia de los paquetes .-> T["TShark + Npcap"]
-    T --> A["Revisor de red<br/>agrupa, explica y analiza"]
-    R["Captura del router<br/>(.pcap / .pcapng)"] -. o abrir archivo .-> A
-    A --> S{{"Semáforo"}}
-    A --> P["Puertos abiertos"]
-    A --> F["Informe para el cliente"]
-```
+<p align="center">
+  <img src="docs/img/como-funciona.png" alt="Diagrama: el dispositivo se conecta por WiFi al hotspot de la laptop, que sale a internet por cable; TShark y Npcap copian los paquetes hacia el Revisor de red, que entrega el semáforo, los puertos abiertos y el informe. Una captura del router también se puede abrir como archivo" width="100%">
+</p>
+
 
 1. **Tu laptop actúa como punto de acceso** (el hotspot de Windows). El dispositivo se conecta a él, así que todo su tráfico pasa por tu equipo, sin tocar el router del cliente.
 2. **TShark** copia los paquetes y la aplicación los lee al instante, los agrupa por dispositivo y aprende los nombres de los servidores a partir de las consultas DNS.
