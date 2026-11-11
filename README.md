@@ -15,7 +15,10 @@ Nació de un caso real: un TV box genérico con ADB abierto recibía órdenes de
    mensajería, publicidad...) y un **semáforo** con el diagnóstico. Tiene botones de **Iniciar, Pausar, Continuar
    y Detener**, y genera un informe en lenguaje simple para el cliente.
 
-4. En la pestaña **Puertos abiertos**, revisa a qué servicios responde el aparato (ADB, Telnet, paneles web...).
+4. El botón **Requisitos** comprueba que Wireshark, Npcap, los permisos y el hotspot estén bien, y te guía para arreglarlo.
+5. El botón **Abrir captura…** carga una captura hecha en el **router** (por ejemplo con el sniffer de MikroTik) y muestra
+   **muchos aparatos a la vez, con los sospechosos primero**.
+6. En la pestaña **Puertos abiertos**, revisa a qué servicios responde el aparato (ADB, Telnet, paneles web...).
    Distingue un ADB **abierto sin clave** (la puerta de entrada de BADBOX y Kimwolf) de uno que pide autorización,
    explica cada puerto y qué hacer, y el resultado se incluye en el informe. Revisión rápida en unos segundos;
    completa (puertos 1 a 10 000) en 1 a 2 minutos. Solo revisa aparatos ya detectados en tu red local, solo TCP

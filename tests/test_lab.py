@@ -156,7 +156,7 @@ class VivoTests(unittest.TestCase):
 
     def test_agrupa_por_dispositivo_y_diagnostica(self):
         e = self.estado()
-        lista = e.lista()
+        lista = e.lista()["items"]
         self.assertEqual(len(lista), 1)
         self.assertEqual(lista[0]["semaforo"], "rojo")
         d = e.datos(lista[0]["mac"])
@@ -220,6 +220,7 @@ class VivoTests(unittest.TestCase):
         est = json.loads(get("/api/estado"))
         self.assertEqual(est["captura"]["estado"], "inactiva")
         mac = est["dispositivos"][0]["mac"]
+        self.assertEqual(est["origen"]["router_mac"], "02:aa:bb:cc:00:01")   # el router se detectó solo
         det = json.loads(get("/api/dispositivo?mac=" + mac.replace(":", "%3A")))
         self.assertEqual(det["semaforo"]["color"], "rojo")
         self.assertIn("glosario", json.loads(get("/api/glosario")))
@@ -303,6 +304,198 @@ class EscaneoTests(unittest.TestCase):
             app = App(abrir=[pcap])
         self.assertFalse(app.lanzar_escaneo("aa:bb:cc:dd:ee:ff", "rapido")["ok"])   # MAC no vista
         self.assertEqual(app.escaneos, {})
+
+
+def _datos_ok(**cambios):
+    """Datos de sistema de un equipo con todo bien; cada prueba cambia lo que quiere probar."""
+    d = {"os": "nt", "python": "3.12.0", "tshark": "C:/Wireshark/tshark.exe",
+         "tshark_v": "TShark (Wireshark) 4.4.6\nwith Npcap version 1.79, based on libpcap",
+         "interfaces": [("\\Device\\NPF_{AAA}", "Ethernet")],
+         "ps": {"admin": "True", "adminonly": "0", "tipo": "6", "estado": "On", "banda": "TwoPointFourGigahertz",
+                "ssid": "TEST", "clientes": "1"},
+         "edge": "C:/edge.exe"}
+    ps = cambios.pop("ps", None)
+    d.update(cambios)
+    if ps is not None:
+        d["ps"] = dict(d["ps"], **ps)
+    return d
+
+
+class RequisitosTests(unittest.TestCase):
+    def estados(self, d):
+        from botnet_lab.requisitos import evaluar
+        return {c["id"]: c for c in evaluar(d)}
+
+    def test_todo_bien(self):
+        from botnet_lab.requisitos import evaluar, resumen
+        r = resumen(evaluar(_datos_ok()))
+        self.assertEqual((r["error"], r["aviso"], r["listo"]), (0, 0, True))
+
+    def test_sin_tshark_ofrece_instalar_wireshark(self):
+        c = self.estados(_datos_ok(tshark=None, tshark_v="", interfaces=[]))
+        self.assertEqual(c["tshark"]["estado"], "error")
+        self.assertEqual(c["tshark"]["accion"], "instalar_wireshark")
+        self.assertEqual(c["npcap"]["estado"], "pendiente")
+
+    def test_sin_npcap(self):
+        c = self.estados(_datos_ok(tshark_v="TShark (Wireshark) 4.4.6\nwith libpcap", interfaces=[]))
+        self.assertEqual(c["npcap"]["estado"], "error")
+        self.assertEqual(c["npcap"]["accion"], "abrir_npcap")
+        self.assertEqual(c["interfaces"]["estado"], "error")
+
+    def test_winpcap_antiguo_es_aviso(self):
+        c = self.estados(_datos_ok(tshark_v="TShark (Wireshark) 4.4.6\nwith WinPcap version 4.1.3"))
+        self.assertEqual(c["npcap"]["estado"], "aviso")
+        self.assertIn("WinPcap", c["npcap"]["detalle"])
+
+    def test_solo_usb_no_son_interfaces_reales(self):
+        c = self.estados(_datos_ok(interfaces=[("\\\\.\\USBPcap1", "USBPcap1"), ("ciscodump", "Cisco remote capture")]))
+        self.assertEqual(c["interfaces"]["estado"], "error")
+
+    def test_npcap_solo_administradores(self):
+        c = self.estados(_datos_ok(ps={"admin": "False", "adminonly": "1"}))
+        self.assertEqual(c["permisos"]["estado"], "error")
+        c = self.estados(_datos_ok(ps={"admin": "False", "adminonly": "0"}))
+        self.assertEqual(c["permisos"]["estado"], "ok")
+
+    def test_hotspot_apagado_y_internet_por_wifi(self):
+        c = self.estados(_datos_ok(ps={"estado": "Off", "tipo": "71"}))
+        self.assertEqual(c["hotspot"]["estado"], "aviso")
+        self.assertEqual(c["hotspot"]["accion"], "abrir_hotspot")
+        self.assertEqual(c["cable"]["estado"], "aviso")      # internet por WiFi fuerza 5 GHz
+        self.assertIn("5 GHz", c["cable"]["detalle"])
+
+    def test_hotspot_en_5ghz_avisa(self):
+        c = self.estados(_datos_ok(ps={"banda": "FiveGigahertz"}))
+        self.assertEqual(c["hotspot"]["estado"], "aviso")
+
+    def test_sin_internet_no_rompe(self):
+        c = self.estados(_datos_ok(ps={"sin_internet": "1", "estado": ""}))
+        self.assertEqual(c["hotspot"]["estado"], "aviso")
+
+    def test_fuera_de_windows_no_pide_hotspot(self):
+        c = self.estados(_datos_ok(os="posix", ps={}))
+        self.assertNotIn("hotspot", c)
+        self.assertNotIn("permisos", c)
+
+
+class RouterTests(unittest.TestCase):
+    def setUp(self):
+        self.d = tempfile.TemporaryDirectory()
+        self.addCleanup(self.d.cleanup)
+
+    def pcap_dos_dispositivos(self):
+        """Un aparato infectado y otro sano, mezclados en una sola captura (como la de un router)."""
+        import emulador_pruebas as em
+        from botnet_lab.pcapio import write_pcap
+        frames = list(em.build(infected=True, duration=120))
+        guardado = (em.DEV_IP, em.DEV_MAC)
+        try:
+            em.DEV_IP, em.DEV_MAC = "192.168.137.60", bytes.fromhex("02aabbcc0060")
+            frames += em.build(infected=False, duration=120, seed=3)
+        finally:
+            em.DEV_IP, em.DEV_MAC = guardado
+        ruta = os.path.join(self.d.name, "router.pcap")
+        write_pcap(ruta, frames)
+        return ruta
+
+    def test_detecta_el_router(self):
+        from botnet_lab.vivo import detectar_router
+        ruta = self.pcap_dos_dispositivos()
+        ip, mac = detectar_router(read_packets(ruta))
+        self.assertEqual((ip, mac), ("192.168.137.1", "02:aa:bb:cc:00:01"))
+
+    def test_sin_trafico_a_internet_no_inventa_router(self):
+        from botnet_lab.vivo import detectar_router
+        self.assertEqual(detectar_router(iter([])), (None, None))
+
+    def test_sospechosos_primero_y_busqueda(self):
+        from botnet_lab.app import App
+        app = App(abrir=[self.pcap_dos_dispositivos()])
+        lista = app.estado.lista()
+        self.assertEqual(lista["total"], 2)                      # el router no cuenta como aparato
+        self.assertEqual(lista["sospechosos"], 1)
+        self.assertEqual(lista["items"][0]["ip"], "192.168.137.50")   # el infectado va primero
+        self.assertEqual(lista["items"][0]["semaforo"], "rojo")
+        solo = app.estado.lista(q="192.168.137.60")["items"]
+        self.assertEqual([x["ip"] for x in solo], ["192.168.137.60"])
+        self.assertTrue(app.origen["automatico"])
+
+    def test_gateway_indicado_manualmente(self):
+        from botnet_lab.app import App
+        app = App(abrir=[self.pcap_dos_dispositivos()], gateway="192.168.137.1")
+        self.assertFalse(app.origen["automatico"])
+        self.assertEqual(app.origen["router_ip"], "192.168.137.1")
+
+    def test_abrir_por_la_api_con_dialogo_simulado(self):
+        import http.server
+        import json
+        import threading
+        import time
+        import urllib.request
+        from unittest import mock
+        from botnet_lab import app as modulo
+        ruta = self.pcap_dos_dispositivos()
+        app = modulo.App()
+        app.abrir_informe = False
+        srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), modulo._manejador(app))
+        self.addCleanup(srv.server_close)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        self.addCleanup(srv.shutdown)
+        base = "http://127.0.0.1:%d" % srv.server_address[1]
+
+        def post(r, cuerpo):
+            q = urllib.request.Request(base + r, json.dumps(cuerpo).encode(), {"Content-Type": "application/json"})
+            return json.loads(urllib.request.urlopen(q, timeout=20).read())
+
+        self.assertFalse(post("/api/abrir", {"gateway": "no-es-ip"})["ok"])            # IP inválida
+        with mock.patch.object(modulo, "elegir_archivos", return_value=[]):
+            self.assertTrue(post("/api/abrir", {})["cancelado"])                       # el usuario cancela
+        with mock.patch.object(modulo, "elegir_archivos", return_value=[ruta]):
+            self.assertTrue(post("/api/abrir", {})["ok"])
+        for _ in range(100):                                                           # espera a que termine de cargar
+            est = json.loads(urllib.request.urlopen(base + "/api/estado", timeout=10).read())
+            if not est["carga"]["activa"] and est["origen"]:
+                break
+            time.sleep(0.2)
+        self.assertEqual(est["total_dispositivos"], 2)
+        self.assertEqual(est["sospechosos"], 1)
+        self.assertIsNone(est["carga"]["error"])
+        busq = json.loads(urllib.request.urlopen(base + "/api/estado?q=192.168.137.60", timeout=10).read())
+        self.assertEqual(len(busq["dispositivos"]), 1)
+
+    def test_archivo_que_no_es_captura(self):
+        from botnet_lab.app import App
+        malo = os.path.join(self.d.name, "x.pcap")
+        with open(malo, "wb") as f:
+            f.write(b"esto no es una captura")
+        app = App()
+        app._cargar_hilo([malo], None)
+        self.assertTrue(app.carga["error"])
+        self.assertIsNone(app.origen)
+
+
+class RequisitosApiTests(unittest.TestCase):
+    def test_api_requisitos_y_acciones(self):
+        import http.server
+        import json
+        import threading
+        import urllib.request
+        from unittest import mock
+        from botnet_lab import app as modulo, requisitos
+        with mock.patch.object(requisitos, "recoger", return_value=_datos_ok(tshark=None, tshark_v="", interfaces=[])):
+            app = modulo.App()
+            srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), modulo._manejador(app))
+            self.addCleanup(srv.server_close)
+            threading.Thread(target=srv.serve_forever, daemon=True).start()
+            self.addCleanup(srv.shutdown)
+            base = "http://127.0.0.1:%d" % srv.server_address[1]
+            r = json.loads(urllib.request.urlopen(base + "/api/requisitos?forzar=1", timeout=10).read())
+            self.assertFalse(r["resumen"]["listo"])
+            ids = {c["id"]: c for c in r["checks"]}
+            self.assertEqual(ids["tshark"]["accion"], "instalar_wireshark")
+            q = urllib.request.Request(base + "/api/requisitos", b'{"accion":"borrar_todo"}', {"Content-Type": "application/json"})
+            self.assertFalse(json.loads(urllib.request.urlopen(q, timeout=10).read())["ok"])   # acciones desconocidas se rechazan
 
 
 if __name__ == "__main__":

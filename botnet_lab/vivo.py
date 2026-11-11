@@ -76,6 +76,30 @@ def _flags(f):
     return "datos" if f & 0x08 else "ACK"
 
 
+# ---------------------------------------------------------------- router
+def detectar_router(paquetes, muestra=80000):
+    """Adivina el router de una captura: la MAC que recibe casi todo lo que va de la red local hacia internet.
+    Devuelve (IP del router o None, MAC del router o None). Si no hay una candidata clara, (None, None)."""
+    loc = Analizador().es_local
+    destinos, ips = collections.Counter(), collections.defaultdict(collections.Counter)
+    for i, p in enumerate(paquetes):
+        if i >= muestra:
+            break
+        if p.src_mac is None or not loc(p.src):
+            continue
+        ips[p.src_mac][p.src] += 1
+        if not loc(p.dst):
+            destinos[p.dst_mac] += 1
+    total = sum(destinos.values())
+    if not total:
+        return None, None
+    mac, n = destinos.most_common(1)[0]
+    if n < 0.5 * total or mac is None:
+        return None, None
+    ip = ips[mac].most_common(1)[0][0] if ips.get(mac) else None
+    return ip, mac_str(mac)
+
+
 # ---------------------------------------------------------------- dispositivo
 class Dispositivo:
     def __init__(self, mac, ip=None, nombre=None):
@@ -104,6 +128,8 @@ class Estado:
         self._t_run = None
         self._loc = Analizador()
         self.clientes = {}                    # MAC -> (nombre, ip) según Windows
+        self.gw_mac = None                    # MAC del router (no se cuenta como aparato)
+        self.solo_archivo = False             # True si se está viendo una captura abierta, no una en vivo
 
     # ---- tiempo activo (sin contar las pausas)
     def activo(self):
@@ -128,7 +154,7 @@ class Estado:
             mac, ip, sale, remoto, rport = mac_str(p.dst_mac), p.dst, False, p.src, p.sport
         else:
             return
-        if mac == "ff:ff:ff:ff:ff:ff":
+        if mac == "ff:ff:ff:ff:ff:ff" or mac == self.gw_mac:
             return
         with self.lock:
             self.total += 1
@@ -213,25 +239,31 @@ class Estado:
                 "faltan_s": max(0, int(informe.MIN_VERDE_S - self.activo())),
                 "hallazgos": res["findings"]}
 
-    def lista(self):
+    def lista(self, q=None, limite=200):
+        """Dispositivos, con los sospechosos primero. `q` filtra por nombre, MAC, IP o fabricante."""
         with self.lock:
             out = []
-            macs = set(self.dispositivos) | set(self.clientes)
+            macs = set(self.dispositivos) | (set() if self.solo_archivo else set(self.clientes))
             for m in macs:
                 d = self.dispositivos.get(m)
-                cli = self.clientes.get(m, (None, None))
+                cli = self.clientes.get(m, (None, None)) if not self.solo_archivo else (None, None)
                 nombre = (d.nombre if d and d.nombre else None) or cli[0]
                 ip = (d.ip if d and d.ip else None) or cli[1]
                 ref = int(self.t_ultimo) if self.t_ultimo else int(time.time())
                 item = {"mac": m, "nombre": nombre or "Dispositivo sin nombre", "ip": ip or "-",
                         "fabricante": oui.fabricante(m, self.tshark),
                         "paquetes": (d.po + d.pi) if d else 0, "visto": d is not None}
+                if q:
+                    t = q.lower()
+                    if not any(t in str(item[k]).lower() for k in ("nombre", "mac", "ip", "fabricante")):
+                        continue
                 if d:
                     item["semaforo"] = self._semaforo(d, ref)["color"]
                     item["ritmo"] = self._ritmo(d, ref)
                 out.append(item)
-            out.sort(key=lambda x: -x["paquetes"])
-            return out
+            orden = {"rojo": 0, "amarillo": 1}
+            out.sort(key=lambda x: (orden.get(x.get("semaforo"), 2), -x["paquetes"]))
+            return {"items": out[:limite], "total": len(out), "sospechosos": sum(1 for x in out if x.get("semaforo") in orden)}
 
     def datos(self, mac, ref=None):
         with self.lock:

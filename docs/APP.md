@@ -69,6 +69,44 @@ La pestaña **Puertos abiertos** revisa a qué servicios de red responde el apar
 
 Solo revisa aparatos ya detectados en tu red local y solo TCP: un puerto cerrado no garantiza seguridad. **Úsalo únicamente en aparatos propios o con permiso de su dueño.**
 
+## Requisitos: comprobar que todo está listo
+
+El botón **Requisitos** (arriba a la derecha) revisa tu equipo y te dice qué falta y cómo arreglarlo. Se abre solo si falta algo importante. Muestra una insignia: **✔ Listo**, **⚠ avisos** o **✖ faltas**.
+
+| Comprobación | Qué revisa | Si falla |
+|---|---|---|
+| Wireshark (TShark) | Que esté instalado el programa que copia los paquetes | Botón **Instalar Wireshark**: abre el instalador guiado con `winget`. Deja marcada la opción **TShark** |
+| Npcap | Que esté el controlador de captura (y que no haya un WinPcap antiguo en conflicto) | Botón **Abrir descarga de Npcap**. Instálalo con las opciones por defecto |
+| Interfaces de red | Que TShark vea adaptadores reales (no solo puertos USB) | Suele ser Npcap sin instalar o sin permisos |
+| Permisos | Si Npcap está limitado a administradores y la app no lo es | Abrir con `Abrir_app.bat` |
+| Hotspot de Windows | Si está encendido, en qué banda y cuántos aparatos hay conectados | Botón **Abrir configuración del hotspot** |
+| Internet del PC | Si tu PC sale a internet por WiFi: Windows fuerza entonces el hotspot a 5 GHz y muchos aparatos baratos solo ven 2,4 GHz | Conecta el PC por cable de red |
+| Ventana | Si hay Edge o Chrome para abrir la app como ventana | Se abre en tu navegador |
+| **Prueba de captura** | Captura 4 segundos de verdad para confirmar que funciona | Muestra el error exacto de TShark |
+
+> **Licencia de Npcap:** la edición gratuita permite un número limitado de instalaciones (cinco, con algunas excepciones). La app no lo instala ni lo redistribuye: solo abre su página oficial. Si lo usarás en muchas laptops de una empresa, revisa la [licencia](https://npcap.com/oem/).
+
+## Abrir una captura del router
+
+No siempre puedes poner un aparato en tu hotspot. Si tienes una captura hecha **en el router o en un switch** (por ejemplo, con el *sniffer* de MikroTik) o con Wireshark, el botón **Abrir captura…** la muestra en la misma ventana, con **muchos aparatos a la vez**.
+
+1. **Obtén la captura.** En MikroTik, un ejemplo (ajusta los nombres a tu equipo):
+   ```
+   /tool sniffer set filter-interface=<interfaz-LAN> filter-mac-address=<MAC-del-aparato> file-name=captura file-limit=50000
+   /tool sniffer start
+   # deja pasar 10 a 15 minutos con el aparato en uso
+   /tool sniffer stop
+   ```
+   Descarga `captura.pcap` desde *Files*. Sin el filtro por MAC capturas todos los clientes de esa interfaz; pesará mucho más.
+2. En la aplicación pulsa **Abrir captura…**, deja vacía la IP del router (se detecta sola) y elige el archivo. Puedes elegir varios.
+3. La app lee el archivo y muestra los aparatos con los **sospechosos primero** (rojo, luego amarillo). Si hay cientos, usa el **buscador** de la izquierda (nombre, MAC, IP o fabricante).
+
+**El router se detecta solo:** es la dirección MAC que recibe casi todo el tráfico que va de la red local hacia internet. No se cuenta como un aparato. La app te lo indica arriba: *"Router detectado: IP · MAC"*. Si no lo detecta (o ves al router como un aparato), vuelve a abrir la captura escribiendo su IP.
+
+Las capturas abiertas se analizan igual que las de en vivo (semáforo, pasteles, conexiones, informe). Dos diferencias: no hay botones de captura, y la revisión de **puertos abiertos** solo funciona con aparatos que estén en tu red en ese momento. También desde la terminal: `python -m botnet_lab app --abrir captura.pcap [--gateway 10.11.0.1]`.
+
+Para que un **verde** valga, la captura debe cubrir **10 minutos o más**; una captura corta da "No concluyente".
+
 ## Límites que debes conocer
 
 - **No es un antivirus ni un IDS.** Un verde significa "no se vieron señales en este tiempo", no "está limpio". Un aparato infectado puede estar callado un buen rato.
@@ -92,3 +130,6 @@ Solo revisa aparatos ya detectados en tu red local y solo TCP: un puerto cerrado
 | "No se pudo capturar" | Falta permiso o Npcap | Abre con `Abrir_app.bat` (administrador) |
 | Aparece el aparato pero sin tráfico | Está inactivo | Ponlo en uso (un video) y pulsa **Iniciar captura** |
 | Todo sale "No concluyente" | Captura de menos de 10 minutos | Deja correr más tiempo |
+| "No se pudo abrir la captura" | El archivo no es un .pcap/.pcapng válido o no trae paquetes IPv4 | Verifica que se descargó completo; ábrelo antes en Wireshark |
+| Ves al router como un aparato | No se detectó el router | Abre la captura de nuevo indicando su IP |
+| Faltan cosas al abrir la app | Wireshark o Npcap | Pulsa **Requisitos** y sigue los pasos |

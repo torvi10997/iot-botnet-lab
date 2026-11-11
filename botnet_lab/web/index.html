@@ -128,6 +128,17 @@
   @media (max-width: 1100px) { .fila2, .fila3 { grid-template-columns: 1fr; } }
   tr.r-alto td { background: var(--rojo-bg); } tr.r-medio td { background: var(--ambar-bg); }
   .badge.b-alto { border-color: var(--rojo); color: var(--rojo); font-weight: 700; }
+  #modalfondo { position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 30; display: flex; align-items: flex-start; justify-content: center; padding: 40px 16px; overflow: auto; }
+  #modalfondo[hidden] { display: none; }
+  .modal { background: var(--card); color: var(--ink); border-radius: 16px; max-width: 760px; width: 100%; padding: 18px 20px; border: 1.5px solid var(--line); }
+  .modal h2 { font-size: 20px; text-transform: none; letter-spacing: 0; color: var(--ink); margin: 0 0 6px; }
+  .req { border: 1.5px solid var(--line); border-radius: 12px; padding: 10px 12px; margin: 8px 0; display: grid; grid-template-columns: 96px 1fr; gap: 10px; }
+  .req .est { font-weight: 800; font-size: 13px; letter-spacing: .03em; }
+  .req.ok .est { color: var(--verde); } .req.aviso { background: var(--ambar-bg); border-color: var(--ambar); } .req.aviso .est { color: var(--ambar); }
+  .req.error { background: var(--rojo-bg); border-color: var(--rojo); } .req.error .est { color: var(--rojo); } .req.pendiente .est { color: var(--gris); }
+  .req b { display: block; } .req .sol { color: var(--ink2); font-size: 13.5px; margin-top: 2px; }
+  .badge.b-ok { border-color: var(--verde); color: var(--verde); } .badge.b-aviso { border-color: var(--ambar); color: var(--ambar); } .badge.b-error { border-color: var(--rojo); color: var(--rojo); font-weight: 700; }
+  pre.cod { white-space: pre-wrap; overflow-wrap: anywhere; background: var(--soft); border-radius: 10px; padding: 10px 12px; overflow: auto; font-size: 12.5px; margin: 6px 0; }
   #toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); background: var(--ink); color: var(--bg);
     padding: 10px 18px; border-radius: 10px; display: none; max-width: 80vw; z-index: 20; }
   @media (max-width: 900px) { main { grid-template-columns: 1fr; } aside { position: static; } .tiles { grid-template-columns: repeat(2, 1fr); } .cat { grid-template-columns: 1fr 1fr 48px; } }
@@ -139,17 +150,21 @@
   <span id="pill" class="pill off">Sin iniciar</span>
   <span id="tiempo"></span>
   <span class="grow"></span>
+  <span id="extras"></span>
   <span id="botones"></span>
   <button class="btn" id="salir" title="Cierra la aplicación y detiene la captura">Salir</button>
 </header>
 <div id="aviso"></div>
 <main>
   <aside>
-    <h2>Dispositivos conectados</h2>
+    <h2>Dispositivos</h2>
+    <input id="buscar" type="search" placeholder="Buscar por nombre, MAC o IP" aria-label="Buscar dispositivo" style="width:100%;padding:7px 10px;border-radius:9px;border:1.5px solid var(--line);background:var(--card);color:var(--ink);margin-bottom:6px">
+    <div id="cuenta" class="nota" style="margin:0 0 8px"></div>
     <div id="lista"></div>
   </aside>
   <section id="detalle"></section>
 </main>
+<div id="modalfondo" hidden><div class="modal" role="dialog" aria-modal="true"><div id="modalcont"></div></div></div>
 <div id="toast"></div>
 
 <script>
@@ -160,7 +175,7 @@ const fmt = (n) => Number(n).toLocaleString("es");
 const kb = (b) => b >= 1048576 ? (b / 1048576).toFixed(1) + " MB" : b >= 1024 ? (b / 1024).toFixed(0) + " KB" : b + " B";
 const mmss = (s) => { s = Math.max(0, Math.round(s)); return String(Math.floor(s / 60)).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0"); };
 
-let puertosDatos = {estado: "nunca"}, est = null, sel = null, tab = (["conexiones", "puertos", "paquetes", "glosario"].includes(location.hash.slice(1)) ? location.hash.slice(1) : "conexiones"), glos = null, ultimoPkt = 0, filas = [], congelada = false, interfazElegida = "";
+let q = "", reqDatos = null, reqRes = {}, modal = null, puertosDatos = {estado: "nunca"}, est = null, sel = null, tab = (["conexiones", "puertos", "paquetes", "glosario"].includes(location.hash.slice(1)) ? location.hash.slice(1) : "conexiones"), glos = null, ultimoPkt = 0, filas = [], congelada = false, interfazElegida = "";
 
 async function api(ruta, cuerpo) {
   const r = await fetch(ruta, cuerpo ? {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(cuerpo)} : undefined);
@@ -188,15 +203,21 @@ function pintarCabecera() {
   const c = est.captura, e = c.estado;
   const pill = $("#pill");
   pill.className = "pill " + (e === "capturando" ? "on" : e === "pausada" ? "pausa" : "off");
-  pill.textContent = e === "capturando" ? "Capturando" : e === "pausada" ? "En pausa" : (c.paquetes ? "Detenida" : "Sin iniciar");
+  pill.textContent = est.origen ? "Captura abierta" : e === "capturando" ? "Capturando" : e === "pausada" ? "En pausa" : (c.paquetes ? "Detenida" : "Sin iniciar");
   $("#tiempo").textContent = c.paquetes || e !== "inactiva" ? "Tiempo observado " + mmss(c.activo_s) : "";
   const hayDatos = c.paquetes > 0;
   let b = "";
-  if (e === "capturando") b = `<button class="btn" onclick="accion('pausar')">Pausar</button> <button class="btn peligro" onclick="accion('detener')">Detener</button>`;
+  if (est.origen) b = `<button class="btn" onclick="accion('nueva')">Nueva revisión</button> <button class="btn primario" onclick="informe()" ${sel ? "" : "disabled"}>Generar informe</button>`;
+  else if (e === "capturando") b = `<button class="btn" onclick="accion('pausar')">Pausar</button> <button class="btn peligro" onclick="accion('detener')">Detener</button>`;
   else if (e === "pausada") b = `<button class="btn primario" onclick="accion('continuar')">Continuar</button> <button class="btn peligro" onclick="accion('detener')">Detener</button>`;
   else if (hayDatos) b = `<button class="btn" onclick="accion('nueva')">Nueva revisión</button> <button class="btn primario" onclick="informe()" ${sel ? "" : "disabled"}>Generar informe</button>`;
   else b = `<button class="btn primario" onclick="iniciar()">Iniciar captura</button>`;
   if ((e === "capturando" || e === "pausada") && sel) b += ` <button class="btn" onclick="informe()" title="Crea el informe con lo observado hasta ahora">Informe</button>`;
+  const enVivo = e === "capturando" || e === "pausada";
+  const rb = reqDatos ? (reqDatos.resumen.error ? ["b-error", "✖ " + reqDatos.resumen.error + " falta" + (reqDatos.resumen.error > 1 ? "n" : "")] : reqDatos.resumen.aviso ? ["b-aviso", "⚠ " + reqDatos.resumen.aviso + " aviso" + (reqDatos.resumen.aviso > 1 ? "s" : "")] : ["b-ok", "✔ Listo"]) : ["", "…"];
+  const ex = `<button class="btn" onclick="abrirRequisitos()" title="Comprueba Wireshark, Npcap, permisos y hotspot">Requisitos <span class="badge ${rb[0]}">${rb[1]}</span></button>` +
+    (enVivo ? "" : ` <button class="btn" onclick="abrirModalCaptura()" title="Ver una captura hecha en el router (MikroTik u otro)">Abrir captura…</button>`);
+  if ($("#extras").dataset.k !== ex) { $("#extras").innerHTML = ex; $("#extras").dataset.k = ex; }
   if ($("#botones").dataset.k !== b) { $("#botones").innerHTML = b; $("#botones").dataset.k = b; }
 }
 function iniciar() { accion("iniciar", {interfaz: interfazElegida || undefined}); }
@@ -210,6 +231,13 @@ function pintarAviso() {
     h += `<div class="banner"><b>No detecté el hotspot de Windows.</b> Actívalo en Configuración, Red e Internet, <i>Zona con cobertura inalámbrica móvil</i>, y conecta el aparato.
       O elige a mano la interfaz: <select onchange="interfazElegida=this.value"><option value="">(elegir)</option>${opts}</select></div>`;
   }
+  if (est.carga && est.carga.activa) h += `<div class="banner"><b>Cargando captura…</b> ${fmt(est.carga.paquetes)} paquetes leídos de ${esc(est.carga.archivos.join(", "))}. Las capturas grandes pueden tardar un poco.</div>`;
+  if (est.carga && est.carga.error) h += `<div class="banner err"><b>No se pudo abrir la captura:</b> ${esc(est.carga.error)}</div>`;
+  if (est.origen) {
+    const o = est.origen;
+    h += `<div class="banner" style="background:var(--soft);border-color:var(--line)"><b>Estás viendo una captura abierta:</b> ${esc(o.archivos.join(", "))} (${fmt(o.paquetes)} paquetes).
+      ${o.router_mac ? `Router ${o.automatico ? "detectado" : "indicado"}: ${esc(o.router_ip || "IP desconocida")} · <span class="mono">${esc(o.router_mac)}</span> (no se cuenta como aparato).` : `<b>No se pudo detectar el router</b>${o.router_ip ? "; se usó " + esc(o.router_ip) : ""}. Si ves al router como un aparato, vuelve a abrir la captura indicando su IP.`}</div>`;
+  }
   if (c.error) h += `<div class="banner err"><b>No se pudo capturar:</b> ${esc(c.error)}<br>Prueba abrir la aplicación como administrador.</div>`;
   if ($("#aviso").dataset.k !== h) { $("#aviso").innerHTML = h; $("#aviso").dataset.k = h; }
 }
@@ -218,6 +246,7 @@ function pintarAviso() {
 function pintarLista() {
   const d = est.dispositivos;
   if (!sel || !d.some((x) => x.mac === sel)) { const p = d.find((x) => x.visto); sel = p ? p.mac : (d[0] ? d[0].mac : null); }
+  $("#cuenta").textContent = est.total_dispositivos ? (d.length < est.total_dispositivos ? "Mostrando " + d.length + " de " + est.total_dispositivos : est.total_dispositivos + " dispositivo" + (est.total_dispositivos > 1 ? "s" : "")) + (est.sospechosos ? " · " + est.sospechosos + " sospechoso" + (est.sospechosos > 1 ? "s" : "") : "") : "";
   if (!d.length) { $("#lista").innerHTML = `<div class="vacio">Aún no hay aparatos.<br>Conecta tu aparato al WiFi del hotspot y pulsa <b>Iniciar captura</b>.</div>`; return; }
   const sem = {rojo: "Rojo", amarillo: "Amarillo", verde: "Verde", corto: "Sin concluir", sin_datos: "Sin tráfico"};
   $("#lista").innerHTML = d.map((x) => `
@@ -432,10 +461,72 @@ function pintarPaquetes() {
       return `<tr><td class="mono">${t}</td><td>${f[3] === "sale" ? "sale" : "entra"}</td><td class="mono">${esc(f[4])}:${f[7]}</td><td class="mono">${esc(f[5])}:${f[8]}</td><td>${esc(f[6])}</td><td class="num">${f[9]}</td><td>${esc(f[10])}</td></tr>`; }).join("") + `</table>`;
 }
 
+// ---------------------------------------------------------------- requisitos
+const ETQ = {ok: "✔ Listo", aviso: "⚠ Aviso", error: "✖ Falta", pendiente: "… Pendiente"};
+function cerrarModal() { modal = null; $("#modalfondo").hidden = true; }
+$("#modalfondo").addEventListener("click", (e) => { if (e.target.id === "modalfondo") cerrarModal(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") cerrarModal(); });
+function mostrarModal(html) { $("#modalcont").innerHTML = html; $("#modalfondo").hidden = false; }
+async function abrirRequisitos(forzar) {
+  modal = "req";
+  mostrarModal(`<h2>Requisitos</h2><p class="nota">Comprobando tu equipo… (unos segundos)</p>`);
+  reqDatos = await api("/api/requisitos" + (forzar ? "?forzar=1" : ""));
+  if (modal === "req") pintarRequisitos();
+}
+function pintarRequisitos() {
+  const r = reqDatos, rs = r.resumen;
+  mostrarModal(`<h2>Requisitos</h2>
+    <div class="frase">${rs.error ? `<b>Faltan ${rs.error} cosa${rs.error > 1 ? "s" : ""}</b> para poder capturar.` : rs.aviso ? "Puedes capturar, pero hay avisos que conviene revisar." : "<b>Todo listo.</b> Puedes capturar."}</div>
+    ${r.checks.map((c) => `<div class="req ${esc(c.estado)}"><div class="est">${ETQ[c.estado]}</div><div><b>${esc(c.titulo)}</b>${esc(c.detalle)}
+      ${c.estado !== "ok" && c.solucion ? `<div class="sol"><b style="display:inline">Cómo arreglarlo:</b> ${esc(c.solucion)}</div>` : ""}
+      ${reqRes[c.id] ? `<div class="sol"><b style="display:inline">${reqRes[c.id].ok ? "✔" : "✖"}</b> ${esc(reqRes[c.id].mensaje)}</div>` : ""}
+      ${c.accion ? `<div style="margin-top:6px"><button class="btn" onclick="reqAccion('${esc(c.accion)}','${esc(c.id)}')">${esc(c.boton)}</button></div>` : ""}</div></div>`).join("")}
+    <div style="margin-top:12px;text-align:right"><button class="btn" onclick="abrirRequisitos(true)">Volver a comprobar</button> <button class="btn primario" onclick="cerrarModal()">Cerrar</button></div>`);
+}
+async function reqAccion(accion, id) {
+  if (accion === "probar_captura") { reqRes[id] = {ok: true, mensaje: "Capturando 4 segundos…"}; pintarRequisitos(); }
+  const r = await api("/api/requisitos", {accion});
+  reqRes[id] = {ok: r.ok !== false, mensaje: r.mensaje || r.error || ""};
+  if (accion === "probar_captura") reqRes[id].ok = !!r.ok;
+  pintarRequisitos();
+}
+async function chequearRequisitos() {
+  try {
+    reqDatos = await api("/api/requisitos");
+    if (reqDatos.resumen.error && !modal) { modal = "req"; pintarRequisitos(); }
+  } catch (e) {}
+}
+
+// ---------------------------------------------------------------- abrir captura del router
+function abrirModalCaptura() {
+  modal = "abrir";
+  mostrarModal(`<h2>Abrir una captura del router</h2>
+    <p>Sirve para analizar el tráfico de <b>muchos aparatos a la vez</b> desde una captura hecha en el router o en un switch, sin necesidad del hotspot. La app los muestra con los <b>sospechosos primero</b>.</p>
+    <p class="nota"><b>Cómo obtenerla en MikroTik</b> (ejemplo; ajusta los nombres a tu equipo). Para un solo cliente, filtra por su MAC:</p>
+    <pre class="cod">/tool sniffer set filter-interface=&lt;interfaz-LAN&gt; filter-mac-address=&lt;MAC-del-aparato&gt; file-name=captura file-limit=50000
+/tool sniffer start
+# deja pasar 10 a 15 minutos con el aparato en uso
+/tool sniffer stop</pre>
+    <p class="nota">Luego descarga <span class="mono">captura.pcap</span> desde <i>Files</i>. También sirven capturas de Wireshark (.pcap, .pcapng).</p>
+    <label for="gw" style="font-weight:600">IP del router (opcional)</label>
+    <input id="gw" placeholder="Se detecta sola; solo si falla, por ejemplo 10.11.0.1" style="width:100%;padding:8px 10px;border-radius:9px;border:1.5px solid var(--line);background:var(--card);color:var(--ink);margin:4px 0 12px">
+    <p class="nota">Una captura pesada puede tardar en cargarse. Solo se leen las cabeceras; el contenido no se muestra.</p>
+    <div style="text-align:right"><button class="btn" onclick="cerrarModal()">Cancelar</button> <button class="btn primario" onclick="elegirCaptura()">Elegir archivo…</button></div>`);
+}
+async function elegirCaptura() {
+  const gw = ($("#gw") && $("#gw").value.trim()) || "";
+  aviso("Elige el archivo en la ventana de Windows que se abrió (puede quedar detrás de esta).");
+  const r = await api("/api/abrir", {gateway: gw});
+  if (r.cancelado) { aviso("No se eligió ningún archivo."); return; }
+  if (!r.ok) { aviso(r.error || "No se pudo abrir"); return; }
+  cerrarModal(); sel = null; aviso("Cargando " + r.archivos.join(", ") + "…"); tick();
+}
+$("#buscar").addEventListener("input", (e) => { q = e.target.value.trim(); tick(); });
+
 // ---------------------------------------------------------------- ciclo
 async function tick() {
   try {
-    est = await api("/api/estado");
+    est = await api("/api/estado" + (q ? "?q=" + encodeURIComponent(q) : ""));
     pintarCabecera(); pintarAviso(); pintarLista();
     if (!sel) { $("#detalle").innerHTML = `<div class="vacio"><b>Cómo empezar</b><ol><li>Activa el hotspot de Windows y conecta el aparato que quieres revisar.</li><li>Pon el aparato en uso (por ejemplo, reproduce un video).</li><li>Pulsa <b>Iniciar captura</b> y mira qué hace.</li></ol></div>`; return; }
     const d = await api("/api/dispositivo?mac=" + encodeURIComponent(sel));
@@ -459,7 +550,8 @@ async function tickPaquetes() {
   } catch (e) {}
 }
 setInterval(tick, 1500); setInterval(tickPaquetes, 1000); setInterval(() => fetch("/api/ping").catch(() => {}), 3000);
-tick(); fetch("/api/ping");
+tick(); fetch("/api/ping"); chequearRequisitos();
+if (location.hash === "#requisitos") abrirRequisitos(); else if (location.hash === "#abrir") abrirModalCaptura();
 </script>
 </body>
 </html>
