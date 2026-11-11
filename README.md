@@ -1,19 +1,25 @@
 # iot-botnet-lab
 
-Emulador y analizador para aprender a detectar **dispositivos IoT comprometidos** (TV box Android genéricos, cámaras, etc.) que se comportan como bots de una botnet DDoS dentro de una red doméstica o de un ISP pequeño.
+Herramienta para revisar, **en tiempo real y con un aparato real**, si un dispositivo IoT (TV box Android genérico, cámara, etc.) se comporta como un **bot de una botnet DDoS**, dentro de una red doméstica o de un ISP pequeño.
 
-Nació de un caso real: un TV box genérico con ADB abierto recibía órdenes de un servidor de control y lanzaba inundaciones UDP a terceros desde la IP pública del operador. Aquí queda empaquetado lo aprendido para que otros puedan practicar y revisar sus propias redes.
+Nació de un caso real: un TV box genérico con ADB abierto recibía órdenes de un servidor de control y lanzaba inundaciones UDP a terceros desde la IP pública del operador. Aquí queda empaquetado lo aprendido para que otros puedan revisar sus propias redes.
 
-> **Solo biblioteca estándar de Python 3.8+.** Para probar el emulador y el analizador no hace falta instalar paquetes ni Wireshark. Para capturar tráfico real (modo visita) sí se necesita Wireshark/TShark: ver [Instalación](#instalación).
+> **Solo biblioteca estándar de Python 3.8+**: no usa `pip`. Para capturar tráfico se necesita Wireshark/TShark: ver [Instalación](#instalación).
+
+## Cómo se usa (resumen)
+
+1. Instala Python y Wireshark (abajo).
+2. Conecta el aparato sospechoso al hotspot de tu laptop Windows.
+3. **Doble clic en `revisar.bat`.** Captura unos 15 minutos y muestra un **semáforo** (rojo, amarillo, verde o no concluyente) con un informe en lenguaje simple.
 
 ## Qué incluye
 
 | Pieza | Para qué sirve |
 |---|---|
-| **Emulador** (`emulate`) | Genera una captura `.pcap` *sintética* de un dispositivo infectado (o sano). No envía tráfico a ninguna red y solo usa IP de documentación (RFC 5737). |
-| **Modo visita** (`visita`) | Asistente para técnicos: captura el tráfico de un aparato en casa del cliente y entrega un informe con semáforo en lenguaje simple. |
-| **Analizador** (`analyze`) | Lee un `.pcap`/`.pcapng` real o emulado y marca los indicios, con explicación y veredicto. |
-| **Guías** (`docs/`) | Cómo capturar el tráfico de un dispositivo, reglas de ejemplo para MikroTik y un plan de respuesta. |
+| **`revisar.bat`** | Abre la aplicación con un doble clic (pide permisos de administrador y arranca el asistente). |
+| **Modo visita** (`visita`) | Asistente: captura el tráfico del aparato, avisa si ve un ataque en curso y entrega un informe con semáforo para el cliente. |
+| **Analizador** (`analyze`) | Lee una captura `.pcap`/`.pcapng` que ya tengas y marca los indicios, con explicación y veredicto. |
+| **Guías** (`docs/`) | Cómo capturar, guía del técnico, reglas de ejemplo para MikroTik y un plan de respuesta. |
 
 ## Instalación
 
@@ -27,37 +33,23 @@ Funciona en Windows, Linux y macOS. El modo visita (captura con hotspot) está p
 
 No hay que instalar nada más (no usa `pip`). Abre una terminal **dentro de la carpeta descomprimida** y ejecuta los comandos de abajo. Para capturar, abre la terminal **como administrador**.
 
-Prueba rápida de que todo funciona (no necesita Wireshark):
-
-```bash
-python -m botnet_lab emulate prueba.pcap
-python -m botnet_lab analyze prueba.pcap
-```
-
-Debe terminar con `Veredicto: SOSPECHOSO`.
+Comprueba la instalación con `python -m botnet_lab --help`: debe mostrar la lista de comandos.
 
 ## Inicio rápido
 
+**Lo más fácil (Windows):** conecta el aparato al hotspot de tu laptop y haz doble clic en `revisar.bat`.
+
+**Con la terminal** (como administrador, dentro de la carpeta de la herramienta):
+
 ```bash
-git clone https://github.com/torvi10997/iot-botnet-lab.git   # o descarga el ZIP (ver Instalación)
-cd iot-botnet-lab
-
-# 1) Generar una captura de un dispositivo infectado y otra de uno sano
-python -m botnet_lab emulate infectado.pcap
-python -m botnet_lab emulate sano.pcap --clean
-
-# 2) Analizarlas
-python -m botnet_lab analyze infectado.pcap
-python -m botnet_lab analyze sano.pcap
-
-# 3) Analizar una captura real de tu red (pcap o pcapng)
-python -m botnet_lab analyze mi_captura.pcapng --device 192.168.1.50
-
-# 4) Revisar un aparato en casa de un cliente (necesita Wireshark/TShark)
+# Revisar un aparato conectado a tu hotspot (captura 15 minutos y genera el informe)
 python -m botnet_lab visita --minutos 15
 
-# 5) Probar el informe sin capturar nada
-python -m botnet_lab visita --desde-captura infectado.pcap
+# Analizar una captura real que ya tengas (pcap o pcapng)
+python -m botnet_lab analyze mi_captura.pcapng --device 192.168.1.50
+
+# Generar el informe con semáforo de una captura existente, sin capturar
+python -m botnet_lab visita --desde-captura mi_captura.pcapng
 ```
 
 Para visitas en campo lee [`docs/VISITA.md`](docs/VISITA.md).
@@ -75,7 +67,7 @@ El código de salida es `2` si el veredicto es *sospechoso*, útil para scripts.
 | `DNS_BYPASS` | El equipo ignora el DNS del router | Informativo; muchos aparatos lo hacen |
 | `SCAN` | Muchos destinos/puertos distintos con SYN en pocos segundos | Búsqueda de nuevas víctimas |
 
-Los umbrales se ajustan con `--min-pps`, `--min-secs` y `--local-net`. Ejemplo de resultado sobre la captura emulada:
+Los umbrales se ajustan con `--min-pps`, `--min-secs` y `--local-net`. Ejemplo de resultado (direcciones de documentación, no son reales):
 
 ```
 [ALTA] Inundación UDP desde 192.168.137.50 hacia 203.0.113.20:19132  (UDP_FLOOD)
@@ -84,17 +76,6 @@ Los umbrales se ajustan con `--min-pps`, `--min-secs` y `--local-net`. Ejemplo d
     Llegó un mensaje de 54 bytes 0.25 s antes de que empezara la inundación. ...
 [MEDIA] Latido periódico 192.168.137.50 -> 198.51.100.10:6969  (BEACON)
 Veredicto: SOSPECHOSO
-```
-
-## Opciones del emulador
-
-```
---clean          dispositivo sano (para probar falsos positivos)
---duration N     segundos de captura (120)
---pps N          paquetes por segundo de cada inundación (600)
---flood-secs N   duración de cada inundación (15)
---scan           añade un barrido SYN al puerto 22
---seed N         semilla para reproducir el mismo escenario
 ```
 
 ## Validación
@@ -110,7 +91,7 @@ Se contrastó con capturas reales de un TV box infectado (reposo, en ataque y tr
 
 ## Uso responsable
 
-Captura solo **redes y dispositivos propios o con autorización expresa** del dueño. Esta herramienta no ataca ni genera tráfico real; el emulador solo escribe un archivo. No publiques capturas reales sin quitar IP, MAC y datos personales.
+Captura solo **redes y dispositivos propios o con autorización expresa** del dueño. Esta herramienta solo observa: no ataca ni genera tráfico hacia terceros. No publiques capturas reales sin quitar IP, MAC y datos personales.
 
 ## Documentación
 
@@ -124,6 +105,8 @@ Captura solo **redes y dispositivos propios o con autorización expresa** del du
 ```bash
 python -m unittest discover -s tests -v
 ```
+
+Las pruebas usan una utilería interna que genera tráfico sintético (`tests/emulador_pruebas.py`); no forma parte de la herramienta.
 
 ## Contribuir
 

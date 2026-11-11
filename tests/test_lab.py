@@ -7,7 +7,7 @@ import unittest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from botnet_lab.analyzer import analyze  # noqa: E402
-from botnet_lab.emulator import build, generate  # noqa: E402
+from emulador_pruebas import build, generate  # noqa: E402
 from botnet_lab.pcapio import read_packets  # noqa: E402
 
 

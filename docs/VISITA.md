@@ -7,14 +7,7 @@ Para visitas donde se sospecha de un TV box, cámara u otro aparato (por ejemplo
 1. **Python 3.8 o superior:** [python.org/downloads](https://www.python.org/downloads/). Marca **"Add Python to PATH"**. Comprueba con `python --version` en una terminal.
 2. **Wireshark:** [wireshark.org/download](https://www.wireshark.org/download.html). Deja marcado **TShark** y acepta instalar **Npcap**. Reinicia la laptop si lo pide.
 3. **La herramienta:** en https://github.com/torvi10997/iot-botnet-lab pulsa **Code**, luego **Download ZIP**, y descomprime (por ejemplo en `C:\iot-botnet-lab`).
-4. **Prueba rápida** (abre una terminal en esa carpeta, sin necesidad de Wireshark):
-
-   ```
-   python -m botnet_lab emulate prueba.pcap
-   python -m botnet_lab analyze prueba.pcap
-   ```
-
-   Debe terminar con `Veredicto: SOSPECHOSO`. Si falla, revisa que Python esté en el PATH.
+4. **Comprobar la instalación:** abre una terminal en esa carpeta y ejecuta `python -m botnet_lab --help`. Debe mostrar la lista de comandos. Si falla, revisa que Python esté en el PATH.
 
 ## Qué necesitas en cada visita
 
@@ -34,7 +27,7 @@ Si el cliente no está de acuerdo, no captures. Guarda un registro de que se le 
 2. **Activa el hotspot:** Configuración, Red e Internet, *Zona con cobertura inalámbrica móvil*. Banda **2,4 GHz**, nombre y clave sencillos.
 3. **Conecta el aparato** a ese WiFi y comprueba que recibió IP (normalmente `192.168.137.x`).
 4. **Pon el aparato en uso**: por ejemplo, abre una app de video. Los bots a veces atacan solo con el aparato activo.
-5. **Ejecuta el asistente** (en una terminal como administrador):
+5. **Abre la aplicación.** Lo más fácil: **doble clic en `revisar.bat`** (pide permisos de administrador y arranca el asistente). O, en una terminal como administrador:
 
    ```
    python -m botnet_lab visita --minutos 15 --referencia "Casa de ..." --tecnico "Tu nombre"

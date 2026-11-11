@@ -1,13 +1,13 @@
-"""Emulador: genera una captura SINTÉTICA de un dispositivo IoT infectado.
+"""Utilería SOLO PARA PRUEBAS: genera una captura SINTÉTICA de un dispositivo IoT infectado.
 
-No envía ni recibe nada por la red: solo escribe un archivo .pcap. Usa direcciones
+No es parte de la herramienta. No envía ni recibe nada por la red: solo escribe un archivo .pcap. Usa direcciones
 de documentación (RFC 5737: 192.0.2.0/24, 198.51.100.0/24, 203.0.113.0/24), así que
 ningún destino es real. Sirve para practicar la detección y para probar reglas.
 """
 import random
 import struct
 
-from .pcapio import frame, tcp_segment, udp_segment, write_pcap
+from botnet_lab.pcapio import frame, tcp_segment, udp_segment, write_pcap
 
 DEV_IP, GW_IP = "192.168.137.50", "192.168.137.1"
 DEV_MAC, GW_MAC = bytes.fromhex("02aabbcc0050"), bytes.fromhex("02aabbcc0001")
