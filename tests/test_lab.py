@@ -6,7 +6,7 @@ import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from botnet_lab.analyzer import analyze  # noqa: E402
+from botnet_lab.analyzer import Analizador, analyze  # noqa: E402
 from emulador_pruebas import build, generate  # noqa: E402
 from botnet_lab.pcapio import read_packets  # noqa: E402
 
@@ -872,6 +872,154 @@ class LimitesTests(unittest.TestCase):
                     self.assertIsNone(sistema.buscar_en_path("herramienta_falsa"))
             finally:
                 os.chdir(anterior)
+
+
+class InundacionesTests(unittest.TestCase):
+    """Inundaciones TCP (SYN) e ICMP: se detectan sin marcar el uso normal."""
+
+    GW = bytes.fromhex("020000000001")
+    M = bytes.fromhex("0200000000aa")
+
+    def setUp(self):
+        self.d = tempfile.TemporaryDirectory()
+        self.addCleanup(self.d.cleanup)
+
+    def analizar(self, **kw):
+        p = os.path.join(self.d.name, "x.pcap")
+        generate(p, **kw)
+        return analyze(p)
+
+    @staticmethod
+    def hallazgos(res, codigo):
+        return [f for f in res["findings"] if f["code"] == codigo]
+
+    @staticmethod
+    def pk(ts, src, dst, proto, sport, dport, flags=0, plen=60):
+        from botnet_lab.pcapio import Packet
+        return Packet(ts, src, dst, proto, sport, dport, flags, plen, b"", plen + 14,
+                      bytes.fromhex("0200000000aa"), bytes.fromhex("020000000001"))
+
+    # ---- SYN
+    def test_syn_flood_sin_syn_ack_es_alta_y_trae_la_orden_de_control(self):
+        res = self.analizar(infected=False, syn_flood=True)
+        syn = self.hallazgos(res, "SYN_FLOOD")
+        self.assertEqual(len(syn), 1)
+        e = syn[0]["evidence"]
+        self.assertEqual((e["dst"], e["dport"], syn[0]["severity"]), ("203.0.113.50", 80, "alta"))
+        self.assertEqual(e["reply_ratio"], 0)
+        self.assertGreater(e["packets"], 8000)
+        orden = self.hallazgos(res, "C2_ORDER")
+        self.assertEqual(len(orden), 1)
+        self.assertEqual(orden[0]["evidence"]["controller"], "198.51.100.10")
+        self.assertEqual(res["verdict"], "sospechoso")
+
+    def test_syn_con_syn_ack_es_carga_normal_no_inundacion(self):
+        res = self.analizar(infected=False, syn_flood=True, flood_replies=True)
+        self.assertEqual(self.hallazgos(res, "SYN_FLOOD"), [])
+
+    def test_barrido_de_muchos_puertos_de_un_host_es_scan_no_syn_flood(self):
+        a = Analizador()
+        for i in range(2000):                                  # 200 SYN/s durante 10 s, cada uno a un puerto distinto
+            a.feed(self.pk(1e9 + i / 200.0, "192.168.137.50", "203.0.113.70", 6, 40000 + i, 1 + i, flags=0x02))
+        codigos = [f["code"] for f in a.resultado()["findings"]]
+        self.assertIn("SCAN", codigos)
+        self.assertNotIn("SYN_FLOOD", codigos)
+
+    def test_syn_a_muchos_destinos_no_es_inundacion(self):
+        a = Analizador()
+        for i in range(3000):                                  # 300 SYN/s a 300 destinos distintos (tipo P2P)
+            a.feed(self.pk(1e9 + i / 300.0, "192.168.137.50", "20.%d.%d.1" % (i // 250, i % 250), 6, 40000 + i, 6881, flags=0x02))
+        self.assertNotIn("SYN_FLOOD", [f["code"] for f in a.resultado()["findings"]])
+
+    def test_syn_bajo_el_umbral_no_se_marca(self):
+        a = Analizador()
+        for i in range(600):                                   # 60 SYN/s al mismo servicio: intenso pero normal
+            a.feed(self.pk(1e9 + i / 60.0, "192.168.137.50", "203.0.113.50", 6, 40000 + i, 443, flags=0x02))
+        self.assertNotIn("SYN_FLOOD", [f["code"] for f in a.resultado()["findings"]])
+
+    # ---- ICMP
+    def test_icmp_flood_sin_respuesta_es_alta(self):
+        res = self.analizar(infected=False, icmp_flood=True)
+        icmp = self.hallazgos(res, "ICMP_FLOOD")
+        self.assertEqual(len(icmp), 1)
+        self.assertEqual((icmp[0]["evidence"]["dst"], icmp[0]["severity"], icmp[0]["evidence"]["reply_ratio"]),
+                         ("203.0.113.60", "alta", 0))
+        self.assertEqual(len(self.hallazgos(res, "C2_ORDER")), 1)
+        self.assertEqual(res["verdict"], "sospechoso")
+
+    def test_icmp_flood_con_respuestas_a_ritmo_moderado_es_media(self):
+        res = self.analizar(infected=False, icmp_flood=True, flood_replies=True, icmp_pps=100)
+        icmp = self.hallazgos(res, "ICMP_FLOOD")
+        self.assertEqual(len(icmp), 1)
+        self.assertEqual(icmp[0]["severity"], "media")             # el destino responde: se baja la gravedad, no se ignora
+        self.assertGreater(icmp[0]["evidence"]["reply_ratio"], 0.9)
+        self.assertEqual(res["verdict"], "sospechoso" if self.hallazgos(res, "C2_ORDER") else "revisar")
+
+    def test_icmp_flood_con_respuestas_a_ritmo_muy_alto_sigue_siendo_alta(self):
+        res = self.analizar(infected=False, icmp_flood=True, flood_replies=True, icmp_pps=600)
+        self.assertEqual(self.hallazgos(res, "ICMP_FLOOD")[0]["severity"], "alta")
+
+    def test_ping_normal_no_es_inundacion(self):
+        a = Analizador()
+        for i in range(300):                                   # un ping por segundo durante 5 minutos, con respuesta
+            a.feed(self.pk(1e9 + i, "192.168.137.50", "8.8.8.8", 1, 0, 0, flags=8))
+            a.feed(self.pk(1e9 + i + 0.02, "8.8.8.8", "192.168.137.50", 1, 0, 0, flags=0))
+        self.assertEqual([f for f in a.resultado()["findings"] if f["code"] == "ICMP_FLOOD"], [])
+
+    def test_ping_hacia_la_red_local_no_cuenta(self):
+        a = Analizador()
+        for i in range(3000):
+            a.feed(self.pk(1e9 + i / 300.0, "192.168.137.50", "192.168.137.60", 1, 0, 0, flags=8))
+        self.assertEqual([f for f in a.resultado()["findings"] if f["code"] == "ICMP_FLOOD"], [])
+
+    # ---- lector, topes, vista en vivo e informe
+    def test_el_lector_distingue_ping_y_respuesta(self):
+        import emulador_pruebas as em
+        from botnet_lab.pcapio import _parse, frame
+        eco = frame(em.DEV_MAC, em.GW_MAC, em.DEV_IP, "203.0.113.60", 1, em.icmp_segment(8, b"x" * 56))
+        resp = frame(em.GW_MAC, em.DEV_MAC, "203.0.113.60", em.DEV_IP, 1, em.icmp_segment(0, b"x" * 56))
+        a, b = _parse(1.0, 1, eco, len(eco)), _parse(1.0, 1, resp, len(resp))
+        self.assertEqual((a.proto, a.flags, a.plen), (1, 8, 56))
+        self.assertEqual((b.proto, b.flags), (1, 0))
+
+    def test_topes_de_memoria_de_las_inundaciones(self):
+        from unittest import mock
+        from botnet_lab import analyzer as an
+        with mock.patch.object(an, "MAX_PARES", 50):
+            a = an.Analizador()
+            for i in range(500):
+                a.feed(self.pk(1e9 + i, "192.168.137.50", "30.%d.%d.1" % (i // 250, i % 250), 6, 4000, 80, flags=0x02))
+                a.feed(self.pk(1e9 + i, "192.168.137.50", "40.%d.%d.1" % (i // 250, i % 250), 1, 0, 0, flags=8))
+            self.assertLessEqual(len(a.syn_out), 50)
+            self.assertLessEqual(len(a.icmp_out), 50)
+
+    def test_la_vista_en_vivo_pone_rojo_y_describe_el_ping(self):
+        from botnet_lab.vivo import Estado
+        p = os.path.join(self.d.name, "v.pcap")
+        generate(p, infected=False, syn_flood=True, icmp_flood=True)
+        e = Estado()
+        for pk in read_packets(p):
+            e.procesar(pk)
+        self.assertEqual(e.lista()["items"][0]["semaforo"], "rojo")
+        # el texto de los paquetes ICMP en la lista en vivo (se comprueba con un Estado propio, sin el muestreo de un ataque)
+        e2 = Estado()
+        e2.procesar(self.pk(1e9, "192.168.137.50", "8.8.8.8", 1, 0, 0, flags=8))
+        e2.procesar(self.pk(1e9 + 0.02, "8.8.8.8", "192.168.137.50", 1, 0, 0, flags=0))
+        textos = [f[10] for f in e2.paquetes()["filas"]]
+        self.assertEqual(textos, ["ICMP: eco (ping)", "ICMP: respuesta de eco"])
+
+    def test_el_informe_explica_las_inundaciones_en_lenguaje_simple(self):
+        from botnet_lab.informe import frases
+        res = self.analizar(infected=False, syn_flood=True, icmp_flood=True)
+        txt = " ".join(t for _, t in frases(res["findings"]))
+        self.assertIn("conexiones nuevas", txt)
+        self.assertIn("pings", txt)
+        self.assertIn("SYN", txt)
+
+    def test_no_aparecen_inundaciones_en_el_trafico_sano(self):
+        res = self.analizar(infected=False, duration=700, quic=True)
+        self.assertEqual([f for f in res["findings"] if f["code"] in ("SYN_FLOOD", "ICMP_FLOOD")], [])
+        self.assertEqual(res["verdict"], "sin indicios")
 
 
 class mock_path:

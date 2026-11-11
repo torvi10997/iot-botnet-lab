@@ -65,7 +65,7 @@ Este proyecto nació de un caso real: un TV box con la depuración ADB abierta l
 
 1. **Tu laptop actúa como punto de acceso** (el hotspot de Windows). El dispositivo se conecta a él, así que todo su tráfico pasa por tu equipo, sin tocar el router del cliente.
 2. **TShark** copia los paquetes y la aplicación los lee al instante, los agrupa por dispositivo y aprende los nombres de los servidores a partir de las consultas DNS.
-3. Un **analizador** busca las huellas de un bot: inundaciones UDP sin respuesta, órdenes de un servidor de control, latidos regulares, consultas DNS sin sentido y barridos de puertos.
+3. Un **analizador** busca las huellas de un bot: inundaciones UDP, SYN (TCP) e ICMP (ping) sin respuesta, órdenes de un servidor de control, latidos regulares, consultas DNS sin sentido y barridos de puertos.
 4. Todo se resume en el **semáforo** y, si quieres, en un **informe**.
 
 La aplicación **solo observa**: no ataca, no modifica el dispositivo y no envía los datos capturados a ningún servidor. Como casi todo el tráfico va cifrado, ve *quién habla con quién, cuándo y cuánto*, pero **no el contenido** de los mensajes.
@@ -108,6 +108,8 @@ El código de salida es `2` si el veredicto es *sospechoso*, útil para scripts.
 | Código | Indicio | Por qué importa |
 |---|---|---|
 | `UDP_FLOOD` | Inundación UDP sostenida (por defecto ≥ 200 paquetes/s durante ≥ 5 s) con casi ninguna respuesta | Es el ataque en sí: tráfico unidireccional hacia un tercero. Una descarga normal (video por QUIC, por ejemplo) **no** se marca, porque el destino responde |
+| `SYN_FLOOD` | Cientos de aperturas de conexión por segundo (≥ 100 durante ≥ 5 s) hacia **un mismo servicio**, con casi ningún SYN-ACK | Es la inundación TCP más común. Si el servidor acepta las conexiones (carga normal) o los SYN van a muchos puertos distintos (un barrido), **no** se marca |
+| `ICMP_FLOOD` | Pings sostenidos (≥ 50 por segundo durante ≥ 5 s) hacia un mismo destino | Un ping normal es 1 por segundo. Aunque el destino responda, a ese ritmo es una inundación (se baja la gravedad, no se ignora) |
 | `C2_ORDER` | Un mensaje pequeño entrante justo antes (≤ 2 s) de que empiece la inundación | Delata al servidor de control que da la orden |
 | `BEACON` | Mensajes del mismo tamaño a intervalos regulares hacia un mismo destino | Latido del canal de control. En los puertos 80 y 443 solo se informa |
 | `DNS_RANDOM` | Consultas DNS con etiquetas largas y aleatorias (incluso binarias) directo a resolvers públicos | Sondeo de dominios del malware |
@@ -155,7 +157,7 @@ Los umbrales se ajustan con `--min-pps`, `--min-secs` y `--local-net`.
 
 - **No es un antivirus ni un sistema de detección de intrusos.** Un *verde* significa «no se vieron señales en este tiempo», no «está limpio»: un dispositivo infectado puede estar callado un buen rato. Por eso la herramienta nunca da verde con menos de 10 minutos de captura.
 - **Un solo caso real de calibración** (un TV box genérico infectado y un teléfono sano). Con otros dispositivos pueden aparecer falsos positivos o pasar algo por alto. Si lo pruebas, abre un *issue* con tus resultados anonimizados.
-- Solo **IPv4**, TCP y UDP. Un dispositivo hecho para evadir (tráfico muy bajo y lento) puede no ser detectado.
+- Solo **IPv4** (TCP, UDP e ICMP). No detecta inundaciones ACK/RST ni de aplicación sobre HTTPS, ni escaneos hacia la red local, ni minería de criptomonedas. Un dispositivo hecho para evadir (tráfico muy bajo y lento) puede no ser detectado.
 - La captura en vivo con hotspot es para **Windows**; el análisis de capturas funciona en cualquier sistema con Python.
 - **Captura únicamente redes y dispositivos propios o con autorización expresa** de su dueño, y avísale antes. No publiques capturas ni informes reales sin quitar IP, MAC y datos personales.
 

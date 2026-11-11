@@ -77,6 +77,19 @@ def explicar(f):
                 "pocas respuestas (%d%% de lo enviado). Puede ser un ataque, pero también tráfico legítimo muy "
                 "intenso: conviene confirmarlo." %
                 (e["packets"], e["seconds"], e["dst"], round(e["reply_ratio"] * 100)))
+    if c == "SYN_FLOOD":
+        base = ("El dispositivo abrió %d conexiones nuevas en unos %d segundos hacia el servicio %s:%d (pico de %d por "
+                "segundo)" % (e["packets"], e["seconds"], e["dst"], e["dport"], e["peak_pps"]))
+        if e["reply_ratio"] < 0.05:
+            return (base + ", sin que el servidor aceptara casi ninguna. Eso es lo que hace un ataque de inundación SYN; "
+                    "también lo haría un dispositivo que reintenta sin parar contra un servidor caído.")
+        return base + " y el servidor aceptó pocas (%d%%). Puede ser un ataque o un fallo que reintenta sin parar." % round(e["reply_ratio"] * 100)
+    if c == "ICMP_FLOOD":
+        base = ("El dispositivo envió %d pings en unos %d segundos hacia %s (pico de %d por segundo; un ping normal es 1 "
+                "por segundo)" % (e["packets"], e["seconds"], e["dst"], e["peak_pps"]))
+        if e["reply_ratio"] < 0.05:
+            return base + ", sin recibir respuesta. Es lo que hace una inundación ICMP para saturar a otro equipo."
+        return base + ". Aunque el destino responde, a ese ritmo es una inundación de ping, no un uso normal."
     if c == "C2_ORDER":
         return ("Justo antes de atacar, el dispositivo recibió un mensaje de %d bytes de %s. Indica que un servidor "
                 "remoto le dio la orden." % (e["order_bytes"], e["controller"]))
@@ -104,7 +117,7 @@ def frases(findings):
     out, por = [], {}
     for f in findings:
         por.setdefault(f["code"], []).append(f)
-    for code in ("UDP_FLOOD", "C2_ORDER", "BEACON", "DNS_RANDOM", "SCAN", "DNS_BYPASS"):
+    for code in ("UDP_FLOOD", "SYN_FLOOD", "ICMP_FLOOD", "C2_ORDER", "BEACON", "DNS_RANDOM", "SCAN", "DNS_BYPASS"):
         g = por.get(code)
         if not g:
             continue
@@ -120,6 +133,11 @@ def frases(findings):
             out.append((sev, "El dispositivo lanzó %d ráfagas de tráfico (%d paquetes en total) hacia %d servidores "
                         "externos (%s), sin recibir respuesta. Eso es lo que hace un equipo usado para atacar a otros."
                         % (len(g), pk, len(dst), ", ".join(dst))))
+        elif code in ("SYN_FLOOD", "ICMP_FLOOD"):
+            destinos = sorted({f["evidence"]["dst"] for f in g})
+            que = "aperturas de conexión (SYN)" if code == "SYN_FLOOD" else "pings (ICMP)"
+            out.append((sev, "El dispositivo lanzó %d ráfagas de %s hacia %d servidores externos (%s) a un ritmo que no "
+                        "es de uso normal." % (len(g), que, len(destinos), ", ".join(destinos))))
         elif code == "C2_ORDER":
             ctl = sorted({f["evidence"]["controller"] for f in g})
             out.append((sev, "Antes de cada ráfaga recibió un mensaje corto de %s (%d veces). Indica que un "

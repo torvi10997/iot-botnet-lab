@@ -128,6 +128,8 @@ def _parse(ts, link, data, orig):
         doff = (l4[12] >> 4) * 4
         return Packet(ts, src, dst, 6, sport, dport, l4[13],
                       max(total - ihl - doff, 0), l4[doff:], orig, smac, dmac)
+    if proto == 1 and len(l4) >= 1:       # ICMP: el tipo (8 = eco/ping, 0 = respuesta) va en `flags`
+        return Packet(ts, src, dst, 1, 0, 0, l4[0], max(total - ihl - 8, 0), b"", orig, smac, dmac)
     return Packet(ts, src, dst, proto, 0, 0, 0, 0, b"", orig, smac, dmac)
 
 

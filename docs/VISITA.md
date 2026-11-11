@@ -41,7 +41,7 @@ Si el cliente no está de acuerdo, no captures. Guarda un registro de que se le 
 
 | Semáforo | Significa | Qué hacer |
 |---|---|---|
-| **Rojo** | Señales claras: inundación UDP, órdenes de un servidor de control, etc. | Desconectar el dispositivo, pedir reemplazo, informar al cliente |
+| **Rojo** | Señales claras: inundación UDP, SYN o ICMP, órdenes de un servidor de control, etc. | Desconectar el dispositivo, pedir reemplazo, informar al cliente |
 | **Amarillo** | Hay señales que conviene revisar | Repetir 15 minutos o más con el dispositivo en uso y confirmar los destinos |
 | **Verde** | No se vieron señales en la captura | No es garantía; recomendar equipos certificados |
 | **No concluyente** | Captura menor de 10 minutos o el dispositivo casi no generó tráfico | Repetir; revisar MAC e interfaz |

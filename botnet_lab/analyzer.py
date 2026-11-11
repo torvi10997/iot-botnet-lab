@@ -7,6 +7,8 @@ Detecta (por cada equipo de la red local):
   DNS_RANDOM  consultas DNS con nombres aleatorios, directo a resolvers públicos
   DNS_BYPASS  uso masivo de resolvers públicos en vez del DNS del router
   SCAN        barrido de muchos destinos/puertos con SYN
+  SYN_FLOOD   inundación de aperturas de conexión (SYN) hacia un mismo servicio, casi sin SYN-ACK
+  ICMP_FLOOD  inundación de ping (ICMP) hacia un mismo destino
 """
 import ipaddress
 import math
@@ -32,6 +34,10 @@ MAX_UDP_IN = 50000       # pares (local, remoto) con tráfico UDP entrante
 MAX_VENTANA_SYN = 500    # destinos/puertos recordados por ventana de 10 s
 MAX_CACHE_IP = 100000    # direcciones cuya "localidad" se recuerda
 MAX_ENTRADAS = 2000000   # presupuesto por defecto de un análisis suelto (archivos)
+
+# Umbrales de las inundaciones TCP (SYN) e ICMP, en paquetes por segundo hacia un mismo destino
+MIN_SYN_PPS = 100        # un cliente normal abre decenas de conexiones por segundo, no cientos hacia un solo servidor
+MIN_ICMP_PPS = 50        # un ping normal es 1 por segundo
 
 
 class Presupuesto:
@@ -116,8 +122,10 @@ def _episodes(secs, min_secs):
 class Analizador:
     """Analiza paquetes uno a uno (feed) y puede dar el resultado en cualquier momento (resultado)."""
 
-    def __init__(self, min_pps=200, min_secs=5, local_nets=None, device=None, presupuesto=None):
+    def __init__(self, min_pps=200, min_secs=5, local_nets=None, device=None, presupuesto=None,
+                 min_syn_pps=MIN_SYN_PPS, min_icmp_pps=MIN_ICMP_PPS):
         self.min_pps, self.min_secs, self.device = min_pps, min_secs, device
+        self.min_syn_pps, self.min_icmp_pps = min_syn_pps, min_icmp_pps
         self.pres = presupuesto or Presupuesto(MAX_ENTRADAS)
         self.nets = [ipaddress.ip_network(n) for n in (local_nets or DEFAULT_LOCAL)]
         self._cache = {}
@@ -133,6 +141,11 @@ class Analizador:
         self.syn = {}                                            # src -> {"w": ventana, "set": {(dst, puerto)}, "max": n}
         self.syn_ports = {}                                      # src -> Counter(puerto)
         self.hosts = Counter()
+        self.syn_out = {}                                        # (src,dst) -> {segundo: [SYN, primer_ts]}
+        self.syn_dports = {}                                     # (src,dst) -> Counter(puerto)
+        self.synack_in = Counter()                               # (local, remoto) -> SYN-ACK recibidos
+        self.icmp_out = {}                                       # (src,dst) -> {segundo: [pings, bytes, primer_ts]}
+        self.icmp_in = Counter()                                 # (local, remoto) -> respuestas de eco recibidas
 
     def es_local(self, ip):
         r = self._cache.get(ip)
@@ -208,12 +221,62 @@ class Analizador:
                         e["last"] = p.ts
                 if p.flags & 0x12 == 0x02:
                     self._syn(p)
-            elif dst_local and not src_local and 1 <= p.plen <= 300:
-                q = self.small_in.get(p.dst)
-                if q is None and len(self.small_in) < MAX_HOSTS and self.pres.pedir(20):
-                    q = self.small_in[p.dst] = deque(maxlen=MAX_ENTRANTES)
-                if q is not None:
-                    q.append((p.ts, p.src, p.sport, p.plen))
+                    self._syn_flood(p)
+            elif dst_local and not src_local:
+                if p.flags & 0x12 == 0x12:                       # SYN-ACK: el destino SÍ acepta conexiones
+                    k = (p.dst, p.src)
+                    if k in self.synack_in or (len(self.synack_in) < MAX_UDP_IN and self.pres.pedir()):
+                        self.synack_in[k] += 1
+                if 1 <= p.plen <= 300:
+                    q = self.small_in.get(p.dst)
+                    if q is None and len(self.small_in) < MAX_HOSTS and self.pres.pedir(20):
+                        q = self.small_in[p.dst] = deque(maxlen=MAX_ENTRANTES)
+                    if q is not None:
+                        q.append((p.ts, p.src, p.sport, p.plen))
+        elif p.proto == 1:                                      # ICMP: `flags` trae el tipo (8 = eco, 0 = respuesta)
+            self._icmp(p, src_local, dst_local)
+
+    def _syn_flood(self, p):
+        """SYN salientes por segundo hacia cada destino (para detectar una inundación SYN)."""
+        key = (p.src, p.dst)
+        secs = self.syn_out.get(key)
+        if secs is None:
+            if len(self.syn_out) >= MAX_PARES or not self.pres.pedir(2):
+                return
+            secs = self.syn_out[key] = {}
+        sec = int(p.ts)
+        b = secs.get(sec)
+        if b is None:
+            b = secs[sec] = [0, p.ts]
+        b[0] += 1
+        if len(secs) > MAX_SEGUNDOS:                              # los segundos "fríos" nunca cuentan
+            for k in [k for k, v in secs.items() if v[0] < self.min_syn_pps]:
+                del secs[k]
+        dp = self.syn_dports.setdefault(key, Counter())
+        if p.dport in dp or (len(dp) < MAX_PUERTOS and self.pres.pedir()):
+            dp[p.dport] += 1
+
+    def _icmp(self, p, src_local, dst_local):
+        if src_local and not dst_local and p.flags == 8:          # eco (ping) saliente
+            key = (p.src, p.dst)
+            secs = self.icmp_out.get(key)
+            if secs is None:
+                if len(self.icmp_out) >= MAX_PARES or not self.pres.pedir(2):
+                    return
+                secs = self.icmp_out[key] = {}
+            sec = int(p.ts)
+            b = secs.get(sec)
+            if b is None:
+                b = secs[sec] = [0, 0, p.ts]
+            b[0] += 1
+            b[1] += p.plen
+            if len(secs) > MAX_SEGUNDOS:
+                for k in [k for k, v in secs.items() if v[0] < self.min_icmp_pps]:
+                    del secs[k]
+        elif dst_local and not src_local and p.flags == 0:        # respuesta de eco entrante
+            k = (p.dst, p.src)
+            if k in self.icmp_in or (len(self.icmp_in) < MAX_UDP_IN and self.pres.pedir()):
+                self.icmp_in[k] += 1
 
     def _syn(self, p):
         r = self.syn.get(p.src)
@@ -239,6 +302,21 @@ class Analizador:
         def want(ip):
             return device is None or ip == device
 
+        def orden(src, first, dst):
+            """¿Llegó un mensaje pequeño justo antes de empezar la inundación? (orden de un servidor de control)"""
+            cand = [(first - t, r, rp, pl) for (t, r, rp, pl) in self.small_in.get(src, [])
+                    if 0 <= first - t <= 2.0]
+            if not cand:
+                return None
+            delay, r, rp, pl = min(cand)
+            return Finding(
+                "C2_ORDER", "alta",
+                "Orden de control %s:%d seguida de inundación a %s" % (r, rp, dst),
+                "Llegó un mensaje de %d bytes %.2f s antes de que empezara la inundación. "
+                "Un servidor de control que dispara ataques deja este patrón." % (pl, delay),
+                {"controller": r, "port": rp, "order_bytes": pl, "delay_s": round(delay, 3),
+                 "victim": dst, "device": src})
+
         # ---- inundaciones UDP y órdenes de control
         for (src, dst), secs in self.udp_out.items():
             if not want(src):
@@ -263,18 +341,65 @@ class Analizador:
                     % (pk, dur, peak, by // max(pk, 1), round(ratio * 100)),
                     {"src": src, "dst": dst, "dport": port, "packets": pk, "seconds": dur,
                      "peak_pps": peak, "reply_ratio": round(ratio, 3), "start_ts": first}))
-                # ¿hubo una orden pequeña entrante justo antes?
-                cand = [(first - t, r, rp, pl) for (t, r, rp, pl) in self.small_in.get(src, [])
-                        if 0 <= first - t <= 2.0]
-                if cand:
-                    delay, r, rp, pl = min(cand)
-                    findings.append(Finding(
-                        "C2_ORDER", "alta",
-                        "Orden de control %s:%d seguida de inundación a %s" % (r, rp, dst),
-                        "Llegó un mensaje de %d bytes %.2f s antes de que empezara la inundación. "
-                        "Un servidor de control que dispara ataques deja este patrón." % (pl, delay),
-                        {"controller": r, "port": rp, "order_bytes": pl, "delay_s": round(delay, 3),
-                         "victim": dst, "device": src}))
+                o = orden(src, first, dst)
+                if o:
+                    findings.append(o)
+
+        # ---- inundaciones SYN (TCP): muchas aperturas de conexión hacia UN servicio, casi sin SYN-ACK
+        for (src, dst), secs in self.syn_out.items():
+            if not want(src):
+                continue
+            hot = {s_: v for s_, v in secs.items() if v[0] >= self.min_syn_pps}
+            dp = self.syn_dports.get((src, dst))
+            if not hot or not dp:
+                continue
+            port, top = dp.most_common(1)[0]
+            if top < 0.5 * sum(v[0] for v in secs.values()):     # SYN a muchos puertos de un host: es un barrido (SCAN)
+                continue
+            for ep in _episodes(hot.keys(), min_secs):
+                pk = sum(hot[s_][0] for s_ in ep if s_ in hot)
+                peak = max(hot[s_][0] for s_ in ep if s_ in hot)
+                first = min(hot[s_][1] for s_ in ep if s_ in hot)
+                dur = ep[-1] - ep[0] + 1
+                ratio = self.synack_in.get((src, dst), 0) / pk if pk else 0
+                if ratio >= 0.3:                                   # el servidor acepta las conexiones: carga normal
+                    continue
+                sev = "alta" if ratio < 0.05 else "media"
+                findings.append(Finding(
+                    "SYN_FLOOD", sev,
+                    "Inundación SYN desde %s hacia %s:%d" % (src, dst, port),
+                    "%d aperturas de conexión en ~%d s (pico %d por segundo), SYN-ACK recibidos: %d%%."
+                    % (pk, dur, peak, round(ratio * 100)),
+                    {"src": src, "dst": dst, "dport": port, "packets": pk, "seconds": dur, "peak_pps": peak,
+                     "reply_ratio": round(ratio, 3), "start_ts": first}))
+                o = orden(src, first, dst)
+                if o:
+                    findings.append(o)
+
+        # ---- inundaciones ICMP (ping)
+        for (src, dst), secs in self.icmp_out.items():
+            if not want(src):
+                continue
+            hot = {s_: v for s_, v in secs.items() if v[0] >= self.min_icmp_pps}
+            for ep in _episodes(hot.keys(), min_secs):
+                pk = sum(hot[s_][0] for s_ in ep if s_ in hot)
+                by = sum(hot[s_][1] for s_ in ep if s_ in hot)
+                peak = max(hot[s_][0] for s_ in ep if s_ in hot)
+                first = min(hot[s_][2] for s_ in ep if s_ in hot)
+                dur = ep[-1] - ep[0] + 1
+                ratio = self.icmp_in.get((src, dst), 0) / pk if pk else 0
+                # un servidor vivo SÍ contesta el ping, así que la respuesta no descarta la inundación: solo baja la gravedad
+                sev = "alta" if (ratio < 0.05 or peak >= 5 * self.min_icmp_pps) else "media"
+                findings.append(Finding(
+                    "ICMP_FLOOD", sev,
+                    "Inundación ICMP (ping) desde %s hacia %s" % (src, dst),
+                    "%d pings en ~%d s (pico %d por segundo, %d B de datos por ping), respuestas: %d%%."
+                    % (pk, dur, peak, by // max(pk, 1), round(min(ratio, 1) * 100)),
+                    {"src": src, "dst": dst, "packets": pk, "seconds": dur, "peak_pps": peak,
+                     "reply_ratio": round(min(ratio, 1), 3), "avg_bytes": by // max(pk, 1), "start_ts": first}))
+                o = orden(src, first, dst)
+                if o:
+                    findings.append(o)
 
         # ---- latidos periódicos
         for (src, dst, dport, plen), e in self.small_out.items():

@@ -236,6 +236,9 @@ class Estado:
                                                   else "(nombre binario de %d bytes)" % len(q or b""))
             elif p.proto == 6:
                 info = _flags(p.flags)
+            elif p.proto == 1:
+                info = {8: "ICMP: eco (ping)", 0: "ICMP: respuesta de eco", 3: "ICMP: destino inalcanzable",
+                        11: "ICMP: tiempo excedido"}.get(p.flags, "ICMP tipo %d" % p.flags)
             # fila para la lista en vivo (con tope por segundo; si hay más, se muestrea)
             if s != self._fila_seg:
                 self._fila_seg, self._fila_n = s, 0

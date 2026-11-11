@@ -124,6 +124,8 @@ GLOSARIO = [
     ("Respuesta", "En una conversación normal, el servidor contesta. Una inundación envía y envía, pero casi nunca recibe respuesta."),
     ("Servidor de control", "Un servidor que da órdenes a dispositivos infectados. Suele dejar un 'latido' regular y mensajes cortos justo antes de un ataque."),
     ("Publicidad y seguimiento", "Muchas apps gratuitas se financian con anuncios y miden tu uso. Aparecen como conexiones a redes publicitarias; no es un ataque."),
+    ("SYN", "El primer mensaje de una conexión TCP («quiero conectarme»). Una inundación SYN envía miles por segundo a un servicio para saturarlo; en una conexión normal el servidor responde (SYN-ACK)."),
+    ("ICMP / ping", "Un mensaje de prueba de red: «¿estás ahí?». Un ping normal es uno por segundo; cientos por segundo hacia un mismo destino son una inundación."),
     ("Botnet", "Una red de dispositivos infectados controlados a distancia, usados sin que su dueño lo sepa para atacar a otros."),
     ("ADB", "Depuración de Android por red. Si está abierta y sin clave en un TV box, cualquiera puede controlarlo."),
 ]

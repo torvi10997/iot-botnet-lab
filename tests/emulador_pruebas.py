@@ -7,7 +7,7 @@ ningún destino es real. Sirve para practicar la detección y para probar reglas
 import random
 import struct
 
-from botnet_lab.pcapio import frame, tcp_segment, udp_segment, write_pcap
+from botnet_lab.pcapio import _csum, frame, tcp_segment, udp_segment, write_pcap
 
 DEV_IP, GW_IP = "192.168.137.50", "192.168.137.1"
 DEV_MAC, GW_MAC = bytes.fromhex("02aabbcc0050"), bytes.fromhex("02aabbcc0001")
@@ -18,6 +18,15 @@ RESOLVERS = ["8.8.8.8", "8.8.4.4", "1.1.1.1", "1.0.0.1"]
 TARGETS = [("203.0.113.20", 19132, 1190), ("203.0.113.30", 30002, 67), ("203.0.113.40", 80, 900)]
 SYN, ACK, PSH = 0x02, 0x10, 0x08
 BASE_TS = 1700000000.0
+SYN_ACK = 0x12
+SYN_TARGET, SYN_PORT = "203.0.113.50", 80
+ICMP_TARGET = "203.0.113.60"
+
+
+def icmp_segment(tipo, payload=b"", ident=1, seq=0):
+    """Mensaje ICMP: tipo 8 = eco (ping), 0 = respuesta de eco."""
+    cab = struct.pack("!BBHHH", tipo, 0, 0, ident, seq)
+    return struct.pack("!BBH", tipo, 0, _csum(cab + payload)) + cab[4:] + payload
 
 
 def _dns_query(name, txid):
@@ -27,7 +36,8 @@ def _dns_query(name, txid):
 
 
 def build(infected=True, duration=120, flood_pps=600, flood_secs=15, dns_rate=25,
-          beacon_every=10, scan=False, seed=7, quic=False):
+          beacon_every=10, scan=False, seed=7, quic=False, syn_flood=False, icmp_flood=False,
+          flood_replies=False, icmp_pps=None):
     """Devuelve la lista de (timestamp, frame) del escenario."""
     rnd = random.Random(seed)
     blob = rnd.getrandbits(8 * 1500).to_bytes(1500, "big")
@@ -100,6 +110,29 @@ def build(infected=True, duration=120, flood_pps=600, flood_secs=15, dns_rate=25
                 inn(tq, qs, 17, udp_segment(qs, DEV_IP, 443, 52000, blob[:1200]))
                 if k % 3 == 0:
                     out(tq + 0.0005, qs, 17, udp_segment(DEV_IP, qs, 52000, 443, blob[:50]))
+    # --- inundaciones TCP (SYN) e ICMP, cada una precedida por una orden del servidor de control
+    def orden(t_order, n):
+        inn(t_order, C2_IP, 6, tcp_segment(C2_IP, DEV_IP, C2_PORT, 51000, ACK | PSH, blob[:55], seq=500 + n))
+        out(t_order + 0.01, C2_IP, 6, tcp_segment(DEV_IP, C2_IP, 51000, C2_PORT, ACK))
+
+    if syn_flood:
+        t_order = duration * 0.3
+        orden(t_order, 1)
+        for k in range(int(flood_secs * flood_pps)):
+            tf = t_order + 0.25 + k / flood_pps
+            sport = 20000 + k % 40000
+            out(tf, SYN_TARGET, 6, tcp_segment(DEV_IP, SYN_TARGET, sport, SYN_PORT, SYN, seq=k))
+            if flood_replies:                    # el servidor acepta cada conexión (carga normal, no ataque)
+                inn(tf + 0.001, SYN_TARGET, 6, tcp_segment(SYN_TARGET, DEV_IP, SYN_PORT, sport, SYN_ACK, seq=k))
+    if icmp_flood:
+        t_order = duration * 0.6
+        orden(t_order, 2)
+        pps = icmp_pps or flood_pps
+        for k in range(int(flood_secs * pps)):
+            tf = t_order + 0.25 + k / pps
+            out(tf, ICMP_TARGET, 1, icmp_segment(8, blob[:56], seq=k))
+            if flood_replies:
+                inn(tf + 0.001, ICMP_TARGET, 1, icmp_segment(0, blob[:56], seq=k))
     return frames
 
 
