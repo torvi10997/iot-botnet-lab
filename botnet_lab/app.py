@@ -137,7 +137,8 @@ class App:
         if os.name != "nt" and accion in ("instalar_wireshark", "abrir_hotspot"):
             return {"ok": False, "error": "Esta acción solo existe en Windows."}
         if accion == "instalar_wireshark":
-            subprocess.Popen('start "Instalar Wireshark" cmd /k ' + requisitos.WINGET_WIRESHARK, shell=True)
+            # ventana de consola propia, sin intérprete de comandos intermedio (sin shell=True): la lista de argumentos es fija
+            subprocess.Popen([sistema.CMD, "/k"] + requisitos.WINGET_WIRESHARK, creationflags=subprocess.CREATE_NEW_CONSOLE)
             return {"ok": True, "mensaje": "Se abrió una ventana de instalación. Sigue los pasos del instalador "
                     "(deja marcado TShark y acepta instalar Npcap) y luego pulsa «Volver a comprobar»."}
         if accion == "abrir_npcap":

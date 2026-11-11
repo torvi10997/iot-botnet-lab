@@ -16,6 +16,7 @@ def _existe(ruta, alternativa):
 
 POWERSHELL = _existe(os.path.join(_RAIZ, "System32", "WindowsPowerShell", "v1.0", "powershell.exe"), "powershell")
 TASKKILL = _existe(os.path.join(_RAIZ, "System32", "taskkill.exe"), "taskkill")
+CMD = _existe(os.path.join(_RAIZ, "System32", "cmd.exe"), "cmd.exe")
 
 
 def _mismo_dir(a, b):

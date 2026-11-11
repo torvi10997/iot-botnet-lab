@@ -296,6 +296,19 @@ class EscaneoTests(unittest.TestCase):
         r = resumen(res)
         self.assertEqual((r["abiertos"], r["alto"], r["peor"]), (3, 1, "alto"))
 
+    def test_instalar_wireshark_no_usa_shell(self):
+        """La acción de instalar abre una consola con argumentos fijos, sin shell=True ni texto de la petición."""
+        from unittest import mock
+        from botnet_lab import app as modulo
+        a = modulo.App()
+        with mock.patch.object(modulo.os, "name", "nt"), mock.patch.object(modulo.subprocess, "Popen") as popen,              mock.patch.object(modulo.subprocess, "CREATE_NEW_CONSOLE", 16, create=True):
+            r = a.requisito_accion("instalar_wireshark")
+        self.assertTrue(r["ok"])
+        args, kw = popen.call_args
+        self.assertIsInstance(args[0], list)
+        self.assertNotIn("shell", kw)
+        self.assertIn("WiresharkFoundation.Wireshark", args[0])
+
     def test_la_app_no_escanea_desconocidos_ni_la_puerta_de_enlace(self):
         import tempfile as tf
         from botnet_lab.app import App

@@ -12,8 +12,8 @@ import tempfile
 from . import sistema
 
 URL_NPCAP = "https://npcap.com/#download"
-WINGET_WIRESHARK = ("winget install --id WiresharkFoundation.Wireshark -e --source winget --interactive "
-                    "--accept-source-agreements --accept-package-agreements")
+WINGET_WIRESHARK = ["winget", "install", "--id", "WiresharkFoundation.Wireshark", "-e", "--source", "winget",
+                    "--interactive", "--accept-source-agreements", "--accept-package-agreements"]
 
 _PS = r"""
 $o = [ordered]@{}
