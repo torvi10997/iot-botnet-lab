@@ -21,6 +21,8 @@ Nació de un caso real: un TV box genérico con ADB abierto recibía órdenes de
    completa (puertos 1 a 10 000) en 1 a 2 minutos. Solo revisa aparatos ya detectados en tu red local, solo TCP
    (un puerto cerrado no garantiza seguridad), y debe usarse **únicamente en aparatos propios o con permiso**.
 
+Guía completa, con cómo funciona por dentro y la solución de problemas: [`docs/APP.md`](docs/APP.md).
+
 La aplicación está pensada también para **aprender**: cada tipo de tráfico y cada término se explica en palabras
 simples, y hay un glosario integrado. Solo observa el tráfico del aparato; no lee su contenido (casi todo va cifrado).
 
@@ -110,6 +112,7 @@ Captura solo **redes y dispositivos propios o con autorización expresa** del du
 
 ## Documentación
 
+- [`docs/APP.md`](docs/APP.md): **guía completa de la aplicación**: cómo funciona, uso paso a paso, qué muestra cada parte de la pantalla, puertos abiertos, límites y solución de problemas.
 - [`docs/VISITA.md`](docs/VISITA.md): guía del técnico para revisar un aparato en casa del cliente (modo visita, semáforo, consentimiento).
 - [`docs/CAPTURA.md`](docs/CAPTURA.md): cómo capturar el tráfico de un TV box u otro aparato (hotspot en Windows, tshark).
 - [`docs/MIKROTIK.md`](docs/MIKROTIK.md): reglas de ejemplo para detectar y bloquear en RouterOS 7.
