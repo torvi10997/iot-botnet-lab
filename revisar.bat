@@ -2,6 +2,7 @@
 chcp 65001 >nul
 title Revisar un dispositivo (consola)
 cd /d "%~dp0"
+set NoDefaultCurrentDirectoryInExePath=1
 
 python --version >nul 2>&1
 if errorlevel 1 (

@@ -8,11 +8,19 @@ import tempfile
 import threading
 import time
 
-from . import informe, oui, servicios
-from .analyzer import Analizador, _qname
+from . import informe, oui, servicios, sistema
+from .analyzer import Analizador, Presupuesto, _qname
 from .pcapio import mac_str, read_stream
 
 GATEWAY_HOTSPOT = "192.168.137.1"
+# Topes de memoria: el dispositivo observado puede ser hostil (suplantar miles de MAC, barrer miles de destinos...)
+MAX_DISPOSITIVOS = 1000           # en vivo; al abrir un archivo (una captura de router) se permiten más
+MAX_ENTRADAS_VIVO = 400000       # presupuesto global de entradas en memoria en una captura en vivo (~150 MB)
+MAX_ENTRADAS_ARCHIVO = 3000000   # al abrir un archivo elegido por el usuario
+MAX_CONVERSACIONES = 5000     # por dispositivo; el resto se agrupa en "(otros destinos)"
+MAX_NOMBRES = 100000          # IP -> dominio aprendidos de respuestas DNS (se descartan los más antiguos)
+MAX_SERIE = 300               # segundos de historial por dispositivo (la gráfica solo muestra 2 minutos)
+OTROS = "(otros destinos)"
 _IP_RE = re.compile(r"^\d+\.\d+\.\d+\.\d+$")
 
 
@@ -102,22 +110,28 @@ def detectar_router(paquetes, muestra=80000):
 
 # ---------------------------------------------------------------- dispositivo
 class Dispositivo:
-    def __init__(self, mac, ip=None, nombre=None):
+    def __init__(self, mac, ip=None, nombre=None, presupuesto=None):
         self.mac, self.ip, self.nombre = mac, ip, nombre
         self.t0 = self.t1 = None
         self.po = self.pi = self.bo = self.bi = 0
         self.serie = {}                       # segundo -> [pkts salientes, pkts entrantes, bytes sal, bytes ent]
         self.conv = {}                        # (remoto, proto, puerto) -> dict
-        self.an = Analizador()
+        self.an = Analizador(presupuesto=presupuesto)
         self._cache = (0, None)
 
 
 class Estado:
-    def __init__(self, gateway=GATEWAY_HOTSPOT, tshark=None):
+    def __init__(self, gateway=GATEWAY_HOTSPOT, tshark=None, presupuesto=MAX_ENTRADAS_VIVO, max_dispositivos=None):
         self.lock = threading.RLock()
+        self.pres = Presupuesto(presupuesto)
+        self.max_dispositivos = max_dispositivos
         self.gw, self.tshark = gateway, tshark
         self.dispositivos = {}
         self.nombres_ip = {}                  # IP -> dominio (aprendido de las respuestas DNS)
+        self.ignorados = 0                    # dispositivos nuevos descartados por superar el tope
+        self.agrupadas = 0                    # conversaciones agrupadas en "(otros destinos)"
+        self.errores = 0                      # paquetes que no se pudieron procesar
+        self._cache_lista = {}
         self.anillo = collections.deque(maxlen=800)
         self.pid = 0
         self._fila_seg, self._fila_n = 0, 0
@@ -161,12 +175,18 @@ class Estado:
             self.t_ultimo = max(self.t_ultimo, p.ts)
             d = self.dispositivos.get(mac)
             if d is None:
-                d = self.dispositivos[mac] = Dispositivo(mac)
+                if len(self.dispositivos) >= (self.max_dispositivos or MAX_DISPOSITIVOS) or not self.pres.pedir(20):
+                    self.ignorados += 1
+                    return
+                d = self.dispositivos[mac] = Dispositivo(mac, presupuesto=self.pres)
             d.ip = ip
             if d.t0 is None:
                 d.t0 = p.ts
             d.t1 = p.ts
             ln = p.wire_len
+            if len(d.serie) > MAX_SERIE + 400:
+                for k in sorted(d.serie)[:-MAX_SERIE]:
+                    del d.serie[k]
             b = d.serie.setdefault(int(p.ts), [0, 0, 0, 0])
             if sale:
                 d.po += 1
@@ -179,9 +199,14 @@ class Estado:
                 b[1] += 1
                 b[3] += ln
             proto = "TCP" if p.proto == 6 else "UDP" if p.proto == 17 else {1: "ICMP", 2: "IGMP", 58: "ICMPv6"}.get(p.proto, "IP%d" % p.proto)
-            c = d.conv.get((remoto, proto, rport))
+            clave = (remoto, proto, rport)
+            if clave not in d.conv and (len(d.conv) >= MAX_CONVERSACIONES or not self.pres.pedir()):
+                clave = (OTROS, proto, 0)
+                if clave not in d.conv:
+                    self.agrupadas += 1
+            c = d.conv.get(clave)
             if c is None:
-                c = d.conv[(remoto, proto, rport)] = {"po": 0, "pi": 0, "bo": 0, "bi": 0, "t0": p.ts, "t1": p.ts, "w": {}}
+                c = d.conv[clave] = {"po": 0, "pi": 0, "bo": 0, "bi": 0, "t0": p.ts, "t1": p.ts, "w": {}}
             c["t1"] = p.ts
             s = int(p.ts)
             if sale:
@@ -201,6 +226,8 @@ class Estado:
                     r = dns_respuesta(p.payload)
                     if r:
                         for x in r[1]:
+                            if x not in self.nombres_ip and len(self.nombres_ip) >= MAX_NOMBRES:
+                                del self.nombres_ip[next(iter(self.nombres_ip))]
                             self.nombres_ip[x] = r[0]
                         info = "Respuesta DNS: %s -> %s" % (r[0], ", ".join(r[1][:3]) or "sin dirección")
                 elif p.dport == 53 and sale:
@@ -242,6 +269,10 @@ class Estado:
     def lista(self, q=None, limite=200):
         """Dispositivos, con los sospechosos primero. `q` filtra por nombre, MAC, IP o fabricante."""
         with self.lock:
+            ahora = time.time()
+            hit = self._cache_lista.get((q, limite))
+            if hit and ahora - hit[0] < 1.5:
+                return hit[1]
             out = []
             macs = set(self.dispositivos) | (set() if self.solo_archivo else set(self.clientes))
             for m in macs:
@@ -263,7 +294,11 @@ class Estado:
                 out.append(item)
             orden = {"rojo": 0, "amarillo": 1}
             out.sort(key=lambda x: (orden.get(x.get("semaforo"), 2), -x["paquetes"]))
-            return {"items": out[:limite], "total": len(out), "sospechosos": sum(1 for x in out if x.get("semaforo") in orden)}
+            res = {"items": out[:limite], "total": len(out), "sospechosos": sum(1 for x in out if x.get("semaforo") in orden)}
+            if len(self._cache_lista) > 20:
+                self._cache_lista.clear()
+            self._cache_lista[(q, limite)] = (ahora, res)
+            return res
 
     def datos(self, mac, ref=None):
         with self.lock:
@@ -357,7 +392,7 @@ def clientes_hotspot():
     if os.name != "nt":
         return {}
     try:
-        out = subprocess.run(["powershell", "-NoProfile", "-Command", _PS_CLIENTES], capture_output=True,
+        out = subprocess.run([sistema.POWERSHELL, "-NoProfile", "-Command", _PS_CLIENTES], capture_output=True,
                              text=True, timeout=25, errors="replace").stdout
     except Exception:
         return {}
@@ -400,7 +435,10 @@ class Captura:
     def _leer(self, proc):
         try:
             for p in read_stream(proc.stdout, self._tee):
-                self.estado.procesar(p)
+                try:
+                    self.estado.procesar(p)
+                except Exception:
+                    self.estado.errores += 1
         except Exception as e:                # el flujo se cortó al detener tshark
             if self.estado_txt == "capturando":
                 self.error = str(e)
@@ -418,7 +456,7 @@ class Captura:
         p, self._proc = self._proc, None
         if p and p.poll() is None:
             if os.name == "nt":               # tshark lanza dumpcap: se cierra todo el árbol
-                subprocess.run(["taskkill", "/T", "/F", "/PID", str(p.pid)], capture_output=True)
+                subprocess.run([sistema.TASKKILL, "/T", "/F", "/PID", str(p.pid)], capture_output=True)
             else:
                 p.terminate()
         if self._hilo:

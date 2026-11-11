@@ -9,6 +9,8 @@ import subprocess
 import sys
 import tempfile
 
+from . import sistema
+
 URL_NPCAP = "https://npcap.com/#download"
 WINGET_WIRESHARK = ("winget install --id WiresharkFoundation.Wireshark -e --source winget --interactive "
                     "--accept-source-agreements --accept-package-agreements")
@@ -49,7 +51,7 @@ def recoger(tshark, interfaces, edge=None):
             pass
     if os.name == "nt":
         try:
-            out = subprocess.run(["powershell", "-NoProfile", "-Command", _PS], capture_output=True, text=True,
+            out = subprocess.run([sistema.POWERSHELL, "-NoProfile", "-Command", _PS], capture_output=True, text=True,
                                  errors="replace", timeout=30).stdout
             for line in out.splitlines():
                 if "=" in line:

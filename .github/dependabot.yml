@@ -1,0 +1,7 @@
+# Propone actualizaciones de las acciones de GitHub fijadas por huella (el proyecto no usa paquetes de Python)
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"

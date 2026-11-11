@@ -231,6 +231,8 @@ function pintarAviso() {
     h += `<div class="banner"><b>No detecté el hotspot de Windows.</b> Actívalo en Configuración, Red e Internet, <i>Zona con cobertura inalámbrica móvil</i>, y conecta el dispositivo.
       O elige a mano la interfaz: <select onchange="interfazElegida=this.value"><option value="">(elegir)</option>${opts}</select></div>`;
   }
+  if (est.limites && (est.limites.dispositivos_ignorados || est.limites.conversaciones_agrupadas || est.limites.memoria_agotada))
+    h += `<div class="banner"><b>Se alcanzó un límite de memoria.</b> ${est.limites.dispositivos_ignorados ? fmt(est.limites.dispositivos_ignorados) + " dispositivos nuevos se ignoraron (más de 1 000 en la red: puede ser suplantación de direcciones). " : ""}${est.limites.conversaciones_agrupadas ? "Algunos dispositivos hablaron con miles de destinos distintos; el resto se agrupó en «otros destinos»." : ""}${est.limites.memoria_agotada ? " Se llenó el presupuesto de memoria: lo nuevo ya no se registra, pero lo anterior sigue funcionando." : ""}</div>`;
   if (est.carga && est.carga.activa) h += `<div class="banner"><b>Cargando captura…</b> ${fmt(est.carga.paquetes)} paquetes leídos de ${esc(est.carga.archivos.join(", "))}. Las capturas grandes pueden tardar un poco.</div>`;
   if (est.carga && est.carga.error) h += `<div class="banner err"><b>No se pudo abrir la captura:</b> ${esc(est.carga.error)}</div>`;
   if (est.origen) {

@@ -194,6 +194,7 @@ class VivoTests(unittest.TestCase):
         from botnet_lab.app import App, _manejador
         app = App(abrir=[self.pcap])
         app.abrir_informe = False
+        app.exigir_token = False
         srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), _manejador(app))
         self.addCleanup(srv.server_close)
         threading.Thread(target=srv.serve_forever, daemon=True).start()
@@ -438,6 +439,7 @@ class RouterTests(unittest.TestCase):
         ruta = self.pcap_dos_dispositivos()
         app = modulo.App()
         app.abrir_informe = False
+        app.exigir_token = False
         srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), modulo._manejador(app))
         self.addCleanup(srv.server_close)
         threading.Thread(target=srv.serve_forever, daemon=True).start()
@@ -485,6 +487,7 @@ class RequisitosApiTests(unittest.TestCase):
         from botnet_lab import app as modulo, requisitos
         with mock.patch.object(requisitos, "recoger", return_value=_datos_ok(tshark=None, tshark_v="", interfaces=[])):
             app = modulo.App()
+            app.exigir_token = False
             srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), modulo._manejador(app))
             self.addCleanup(srv.server_close)
             threading.Thread(target=srv.serve_forever, daemon=True).start()
@@ -573,6 +576,7 @@ class VentanaTests(unittest.TestCase):
         import urllib.request
         from botnet_lab import app as modulo
         a = modulo.App()
+        a.exigir_token = False
         srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), modulo._manejador(a))
         self.addCleanup(srv.server_close)
         threading.Thread(target=srv.serve_forever, daemon=True).start()
@@ -582,6 +586,293 @@ class VentanaTests(unittest.TestCase):
         self.assertIn("abc", a.paginas)
         urllib.request.urlopen(urllib.request.Request(base + "/api/ping?id=abc&cerrar=1", b"", method="POST"), timeout=10).read()
         self.assertNotIn("abc", a.paginas)             # sendBeacon al cerrar la ventana
+
+
+class SeguridadTests(unittest.TestCase):
+    """Hallazgos de la auditoría de seguridad: cada uno tiene su prueba para que no vuelva."""
+
+    def levantar(self):
+        import threading
+        from botnet_lab import app as modulo
+        a = modulo.App()
+        a.abrir_informe = False
+        srv = modulo.ServidorLocal(("127.0.0.1", 0), modulo._manejador(a))
+        self.addCleanup(srv.server_close)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        self.addCleanup(srv.shutdown)
+        return a, srv, srv.server_address[1], modulo
+
+    def pet(self, puerto, metodo, ruta, headers=None, cuerpo=None):
+        import http.client
+        h = {"Host": "127.0.0.1:%d" % puerto}
+        h.update(headers or {})
+        c = http.client.HTTPConnection("127.0.0.1", puerto, timeout=10)
+        try:
+            c.putrequest(metodo, ruta, skip_host=True, skip_accept_encoding=True)
+            for k, v in h.items():
+                c.putheader(k, v)
+            if cuerpo is not None:
+                c.putheader("Content-Length", str(len(cuerpo)))
+            c.endheaders(cuerpo)
+            r = c.getresponse()
+            return r.status, {k.lower(): v for k, v in r.getheaders()}, r.read()
+        finally:
+            c.close()
+
+    def test_sin_el_secreto_de_la_sesion_todo_se_rechaza(self):
+        a, srv, p, _ = self.levantar()
+        for ruta in ("/", "/api/estado", "/api/dispositivo?mac=x", "/api/paquetes", "/api/escaneo", "/api/glosario",
+                     "/api/requisitos", "/api/ping?id=x"):
+            self.assertEqual(self.pet(p, "GET", ruta)[0], 403, ruta)
+        for ruta in ("/api/control", "/api/salir", "/api/informe", "/api/abrir", "/api/escaneo", "/api/requisitos"):
+            self.assertEqual(self.pet(p, "POST", ruta, cuerpo=b"{}")[0], 403, ruta)
+        self.assertEqual(a.paginas, {})            # ni siquiera el latido de una página ajena se acepta
+
+    def test_enlace_con_secreto_entrega_cookie_y_la_quita_de_la_direccion(self):
+        a, srv, p, _ = self.levantar()
+        self.assertEqual(self.pet(p, "GET", "/?t=adivinando")[0], 403)
+        st, h, _ = self.pet(p, "GET", "/?t=" + a.token)
+        self.assertEqual(st, 302)
+        self.assertEqual(h["location"], "/")                                   # el secreto no queda en la barra
+        self.assertIn("HttpOnly", h["set-cookie"])
+        self.assertIn("SameSite=Strict", h["set-cookie"])
+        cookie = {"Cookie": h["set-cookie"].split(";")[0]}
+        self.assertEqual(self.pet(p, "GET", "/api/estado", cookie)[0], 200)
+        self.assertEqual(self.pet(p, "GET", "/", cookie)[0], 200)
+
+    def test_cookie_ajena_o_malformada_no_sirve(self):
+        a, srv, p, _ = self.levantar()
+        for c in ("rt=otro", "rt=", "basura", "rt=" + "a" * 5000, "rt=\"\x00\"; ;;="):
+            self.assertEqual(self.pet(p, "GET", "/api/estado", {"Cookie": c})[0], 403, c)
+
+    def test_cabeceras_de_seguridad(self):
+        a, srv, p, _ = self.levantar()
+        ck = {"Cookie": "rt=" + a.token}
+        st, h, _ = self.pet(p, "GET", "/", ck)
+        self.assertIn("default-src 'none'", h["content-security-policy"])
+        self.assertIn("frame-ancestors 'none'", h["content-security-policy"])
+        self.assertIn("connect-src 'self'", h["content-security-policy"])
+        self.assertEqual(h["x-content-type-options"], "nosniff")
+        self.assertEqual(h["x-frame-options"], "DENY")
+        self.assertEqual(h["referrer-policy"], "no-referrer")
+        self.assertEqual(self.pet(p, "GET", "/api/estado", ck)[1]["x-content-type-options"], "nosniff")
+
+    def test_cuerpos_enormes_y_content_length_invalido(self):
+        a, srv, p, _ = self.levantar()
+        ck = {"Cookie": "rt=" + a.token}
+        self.assertEqual(self.pet(p, "POST", "/api/control", dict(ck, **{"Content-Length": "1000000000"}))[0], 413)
+        self.assertEqual(self.pet(p, "POST", "/api/control", dict(ck, **{"Content-Length": "abc"}))[0], 400)
+        self.assertEqual(self.pet(p, "POST", "/api/control", dict(ck, **{"Content-Length": "-5"}))[0], 400)
+
+    def test_cuerpos_que_no_son_objetos_json_no_rompen_nada(self):
+        a, srv, p, _ = self.levantar()
+        ck = {"Cookie": "rt=" + a.token}
+        for cuerpo in (b"[1,2,3]", b"null", b'"texto"', b"{no es json", b'{"mac": ["x"], "accion": {"a": 1}}', b'{"accion": 5}'):
+            st, _, _ = self.pet(p, "POST", "/api/control", ck, cuerpo)
+            self.assertEqual(st, 200, cuerpo)
+        self.assertEqual(self.pet(p, "GET", "/api/paquetes?desde=abc", ck)[0], 200)
+
+    def test_interfaz_debe_estar_en_la_lista_de_tshark(self):
+        from unittest import mock
+        a, srv, p, modulo = self.levantar()
+        a.tshark = "tshark-falso"
+        a.interfaces = [("\\Device\\NPF_{A}", "Ethernet")]
+        for malo in ("rpcap://203.0.113.9/eth0", "TCP@203.0.113.9:2002", "-w C:/x.pcap", "C:/captura.pcap", "-"):
+            r = a.control({"accion": "iniciar", "interfaz": malo})
+            self.assertFalse(r["ok"], malo)
+            self.assertIn("no válida", r["error"])
+        self.assertIsNone(a.captura)
+        with mock.patch.object(modulo.vivo, "Captura") as cap:
+            self.assertTrue(a.control({"accion": "iniciar", "interfaz": "\\Device\\NPF_{A}"})["ok"])
+            cap.assert_called_once()
+
+    def test_tope_de_conexiones_simultaneas(self):
+        import socket
+        a, srv, p, modulo = self.levantar()
+        for _ in range(modulo.MAX_CONEXIONES):
+            srv._cupo.acquire()
+        try:
+            s = socket.create_connection(("127.0.0.1", p), timeout=5)
+            s.sendall(b"GET /api/estado HTTP/1.0\r\n\r\n")
+            try:
+                datos = s.recv(100)
+            except ConnectionError:
+                datos = b""
+            self.assertEqual(datos, b"")                     # se cierra sin atender
+            s.close()
+        finally:
+            for _ in range(modulo.MAX_CONEXIONES):
+                srv._cupo.release()
+
+    def test_el_secreto_de_la_sesion_nunca_se_escribe_en_el_registro(self):
+        import types
+        from unittest import mock
+        a, srv, p, modulo = self.levantar()
+        escritos = []
+        with mock.patch.object(modulo, "_log", side_effect=escritos.append),              mock.patch.object(modulo, "_abrir_ventana"), mock.patch.object(modulo, "ServidorLocal", return_value=srv),              mock.patch.object(srv, "serve_forever", side_effect=KeyboardInterrupt),              mock.patch.object(modulo.App, "salir"), mock.patch.object(modulo, "App", return_value=a):
+            modulo.ejecutar(types.SimpleNamespace(sin_ventana=True, puerto=0))
+        self.assertTrue(escritos)
+        self.assertFalse([m for m in escritos if a.token in m], "el registro contiene el secreto")
+
+    def test_las_conexiones_a_medias_tienen_tiempo_limite(self):
+        a, srv, p, modulo = self.levantar()
+        self.assertEqual(modulo._manejador(a).timeout, modulo.TIEMPO_CONEXION)
+        self.assertLessEqual(modulo.TIEMPO_CONEXION, 30)
+
+
+class LimitesTests(unittest.TestCase):
+    """Un dispositivo hostil no debe poder agotar la memoria de la aplicación."""
+
+    @staticmethod
+    def pk(ts, src, dst, proto, sport, dport, smac, dmac, flags=0, payload=b"", plen=60):
+        from botnet_lab.pcapio import Packet
+        return Packet(ts, src, dst, proto, sport, dport, flags, plen, payload, plen + 14, smac, dmac)
+
+    GW = bytes.fromhex("020000000001")
+
+    def test_suplantacion_de_mac_tiene_tope(self):
+        import struct
+        from unittest import mock
+        from botnet_lab import vivo
+        with mock.patch.object(vivo, "MAX_DISPOSITIVOS", 50):
+            e = vivo.Estado()
+            for i in range(500):
+                mac = struct.pack(">Q", 0x020000000000 + i)[2:]
+                e.procesar(self.pk(1e9 + i, "192.168.%d.%d" % (i // 250, 1 + i % 250), "8.8.8.8", 17, 4000, 53, mac, self.GW))
+            self.assertEqual(len(e.dispositivos), 50)
+            self.assertEqual(e.ignorados, 450)
+
+    def test_miles_de_destinos_se_agrupan_sin_perder_la_cuenta(self):
+        from unittest import mock
+        from botnet_lab import vivo
+        mac = bytes.fromhex("0200000000aa")
+        with mock.patch.object(vivo, "MAX_CONVERSACIONES", 100):
+            e = vivo.Estado()
+            for i in range(1000):
+                e.procesar(self.pk(1e9 + i / 100, "192.168.137.50", "10.%d.%d.1" % (i // 250, i % 250), 6, 40000, 80, mac, self.GW))
+            d = next(iter(e.dispositivos.values()))
+            self.assertLessEqual(len(d.conv), 101)
+            self.assertEqual(sum(c["po"] for c in d.conv.values()), 1000)      # ningún paquete se pierde de la cuenta
+            self.assertTrue(e.agrupadas)
+
+    def test_nombres_dns_aprendidos_tienen_tope_y_se_renuevan(self):
+        from unittest import mock
+        from botnet_lab import vivo
+        mac = bytes.fromhex("0200000000aa")
+        nombre = b"\x04host\x07example\x03com\x00"
+        with mock.patch.object(vivo, "MAX_NOMBRES", 100):
+            e = vivo.Estado()
+            for i in range(1000):
+                resp = (b"\x12\x34\x81\x80\x00\x01\x00\x01\x00\x00\x00\x00" + nombre + b"\x00\x01\x00\x01" +
+                        b"\xc0\x0c\x00\x01\x00\x01\x00\x00\x00\x3c\x00\x04" + bytes([1, 2, i // 256, i % 256]))
+                e.procesar(self.pk(1e9 + i, "9.9.9.9", "192.168.137.50", 17, 53, 40000, self.GW, mac, payload=resp))
+            self.assertLessEqual(len(e.nombres_ip), 100)
+            self.assertIn("1.2.3.231", e.nombres_ip)                           # lo más reciente se conserva
+
+    def test_el_presupuesto_global_es_un_limite_duro(self):
+        """Aunque haya miles de dispositivos falsos, el total de entradas guardadas no pasa del presupuesto."""
+        import struct
+        from botnet_lab import vivo
+        e = vivo.Estado(presupuesto=2000)
+        for i in range(20000):
+            mac = struct.pack(">Q", 0x020000000000 + i)[2:]
+            e.procesar(self.pk(1e9 + i / 100, "192.168.%d.%d" % (i // 250 % 200, 1 + i % 250),
+                               "20.%d.%d.1" % (i // 250 % 250, i % 250), 17, 4000, 5000 + i % 1000, mac, self.GW))
+        self.assertLessEqual(e.pres.usado, 2000)
+        self.assertGreater(e.pres.rechazos, 0)
+        self.assertGreater(e.ignorados, 0)
+        primero = next(iter(e.dispositivos))
+        self.assertIsNotNone(e.datos(primero))             # lo ya guardado sigue funcionando
+        self.assertTrue(e.lista()["items"])
+
+    def test_el_historial_por_segundo_esta_acotado(self):
+        from botnet_lab import vivo
+        e = vivo.Estado()
+        mac = bytes.fromhex("0200000000aa")
+        for s in range(5000):
+            e.procesar(self.pk(1e9 + s, "192.168.137.50", "8.8.8.8", 17, 4000, 53, mac, self.GW))
+        d = next(iter(e.dispositivos.values()))
+        self.assertLessEqual(len(d.serie), vivo.MAX_SERIE + 400)
+
+    def test_el_analizador_tiene_topes(self):
+        from unittest import mock
+        from botnet_lab import analyzer as an
+        with mock.patch.object(an, "MAX_PARES", 100), mock.patch.object(an, "MAX_HOSTS", 50), \
+             mock.patch.object(an, "MAX_EVENTOS", 100), mock.patch.object(an, "MAX_CLAVES", 100):
+            a = an.Analizador()
+            m = bytes.fromhex("0200000000aa")
+            for i in range(1000):                      # un origen hacia mil destinos UDP distintos
+                a.feed(self.pk(1e9 + i, "192.168.137.50", "20.%d.%d.1" % (i // 250, i % 250), 17, 4000, 9000 + i, m, self.GW))
+            self.assertEqual(len(a.udp_out), 100)
+            for i in range(1000):                      # mil direcciones de origen falsas
+                a.feed(self.pk(2e9 + i, "10.9.%d.%d" % (i // 250, 1 + i % 250), "8.8.8.8", 17, 1, 53, m, self.GW))
+            self.assertLessEqual(len(a.hosts), 50)
+            for i in range(5000):                      # latidos espaciados más de 2 s
+                a.feed(self.pk(3e9 + i * 3, "192.168.137.50", "30.0.0.1", 6, 5000, 6969, m, self.GW, flags=0x18, plen=33))
+            self.assertLessEqual(len(next(iter(a.small_out.values()))["ev"]), 100)
+            self.assertLessEqual(len(a.small_out), 100)
+
+    def test_los_latidos_comprimidos_siguen_detectandose(self):
+        """La compresión a 'eventos' no cambia el resultado: 12 latidos en pareja cada 30 s siguen siendo un BEACON."""
+        from botnet_lab import analyzer as an
+        a = an.Analizador()
+        m = bytes.fromhex("0200000000aa")
+        for k in range(12):
+            for dt in (0.0, 0.6):
+                a.feed(self.pk(1e9 + k * 30 + dt, "192.168.137.50", "198.51.100.10", 6, 5000, 6969, m, self.GW, flags=0x18, plen=33))
+        res = a.resultado()
+        beacon = [f for f in res["findings"] if f["code"] == "BEACON"]
+        self.assertEqual(len(beacon), 1)
+        self.assertEqual(beacon[0]["evidence"]["count"], 12)
+
+    def test_un_paquete_problematico_no_detiene_la_captura(self):
+        import io
+        from unittest import mock
+        from botnet_lab import vivo
+        from botnet_lab.pcapio import write_pcap
+        import emulador_pruebas as em
+        with tempfile.TemporaryDirectory() as d:
+            ruta = os.path.join(d, "x.pcap")
+            write_pcap(ruta, list(em.build(infected=False, duration=60)))
+            datos = open(ruta, "rb").read()
+            total = sum(1 for _ in read_packets(ruta))
+        estado = mock.Mock()
+        estado.errores = 0
+        estado.procesar.side_effect = [RuntimeError("paquete raro")] + [None] * 100000
+        cap = vivo.Captura(estado, "tshark", "x")
+        cap.estado_txt = "detenida"
+        proc = mock.Mock(stdout=io.BytesIO(datos), poll=lambda: 0, returncode=0)
+        cap._leer(proc)
+        self.assertEqual(estado.errores, 1)
+        self.assertGreater(total, 50)
+        self.assertEqual(estado.procesar.call_count, total)                   # siguió leyendo todos los paquetes tras el error
+
+    def test_el_directorio_actual_no_se_usa_para_buscar_programas(self):
+        from botnet_lab import sistema
+        with tempfile.TemporaryDirectory() as d:
+            falso = os.path.join(d, "herramienta_falsa.exe")
+            open(falso, "wb").write(b"MZ")
+            anterior = os.getcwd()
+            os.chdir(d)
+            try:
+                with mock_path(os.pathsep.join([".", d])):
+                    self.assertIsNone(sistema.buscar_en_path("herramienta_falsa"))
+            finally:
+                os.chdir(anterior)
+
+
+class mock_path:
+    """Cambia el PATH un momento."""
+
+    def __init__(self, valor):
+        self.valor = valor
+
+    def __enter__(self):
+        self.antes = os.environ.get("PATH", "")
+        os.environ["PATH"] = self.valor
+
+    def __exit__(self, *a):
+        os.environ["PATH"] = self.antes
 
 
 if __name__ == "__main__":

@@ -11,13 +11,46 @@ Detecta (por cada equipo de la red local):
 import ipaddress
 import math
 import statistics
-from collections import Counter, defaultdict
+from collections import Counter, defaultdict, deque
 
 from .pcapio import read_packets
 
 SEV_ORDER = {"alta": 0, "media": 1, "info": 2}
 # Red local por defecto: RFC 1918 + link-local + CGNAT (no usar is_private: incluye rangos de documentación)
 DEFAULT_LOCAL = ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "169.254.0.0/16", "100.64.0.0/10"]
+
+# Topes de memoria. El dispositivo que se analiza puede ser hostil: si inventa miles de destinos, puertos o
+# direcciones, la aplicación no debe crecer sin límite. Lo que supera un tope se ignora (no rompe el análisis).
+MAX_PARES = 20000        # pares (origen, destino) con tráfico UDP saliente seguidos a la vez
+MAX_SEGUNDOS = 4000      # segundos por par; al pasarse se descartan los que no llegan al umbral de inundación
+MAX_PUERTOS = 64         # puertos distintos recordados por par
+MAX_CLAVES = 20000       # claves de latido (origen, destino, puerto, tamaño)
+MAX_EVENTOS = 3000       # latidos recordados por clave
+MAX_HOSTS = 5000         # direcciones locales distintas recordadas
+MAX_ENTRANTES = 2000     # mensajes pequeños entrantes recordados por equipo
+MAX_UDP_IN = 50000       # pares (local, remoto) con tráfico UDP entrante
+MAX_VENTANA_SYN = 500    # destinos/puertos recordados por ventana de 10 s
+MAX_CACHE_IP = 100000    # direcciones cuya "localidad" se recuerda
+MAX_ENTRADAS = 2000000   # presupuesto por defecto de un análisis suelto (archivos)
+
+
+class Presupuesto:
+    """Tope GLOBAL de entradas en memoria, compartido por todos los dispositivos de una sesión.
+
+    Los topes por dispositivo no bastan: mil dispositivos falsos podrían llenar cada uno el suyo. Cada vez que se
+    guarda algo nuevo (un par de direcciones, un puerto, una conversación...) se pide al presupuesto; si se agotó,
+    lo nuevo se ignora y se cuenta en `rechazos` (la ventana avisa), mientras lo ya guardado sigue funcionando.
+    """
+
+    def __init__(self, limite):
+        self.limite, self.usado, self.rechazos = limite, 0, 0
+
+    def pedir(self, n=1):
+        if self.usado + n > self.limite:
+            self.rechazos += 1
+            return False
+        self.usado += n
+        return True
 
 
 class Finding:
@@ -83,8 +116,9 @@ def _episodes(secs, min_secs):
 class Analizador:
     """Analiza paquetes uno a uno (feed) y puede dar el resultado en cualquier momento (resultado)."""
 
-    def __init__(self, min_pps=200, min_secs=5, local_nets=None, device=None):
+    def __init__(self, min_pps=200, min_secs=5, local_nets=None, device=None, presupuesto=None):
         self.min_pps, self.min_secs, self.device = min_pps, min_secs, device
+        self.pres = presupuesto or Presupuesto(MAX_ENTRADAS)
         self.nets = [ipaddress.ip_network(n) for n in (local_nets or DEFAULT_LOCAL)]
         self._cache = {}
         self.n = 0
@@ -92,22 +126,26 @@ class Analizador:
         self.udp_out = defaultdict(lambda: defaultdict(lambda: [0, 0, None]))  # (src,dst) -> sec -> [pkts, bytes, first_ts]
         self.dports = defaultdict(Counter)
         self.udp_in = Counter()                                  # (local, remote) -> paquetes
-        self.small_out = defaultdict(list)                       # (src,dst,dport,plen) -> [ts]
-        self.small_in = defaultdict(list)                        # local -> [(ts, remote, rport, plen)]
+        self.small_out = {}                                      # (src,dst,dport,plen) -> {"ev": [inicio de cada latido], "last": ts}
+        self.small_in = {}                                       # local -> deque[(ts, remote, rport, plen)]
         self.dns = defaultdict(lambda: {"total": 0, "pub": 0, "rnd": 0, "t0": None, "t1": None,
                                         "resolvers": Counter(), "ex": None})
-        self.syn_win = defaultdict(lambda: defaultdict(set))     # src -> ventana 10 s -> {(dst, puerto)}
-        self.syn_ports = defaultdict(Counter)
+        self.syn = {}                                            # src -> {"w": ventana, "set": {(dst, puerto)}, "max": n}
+        self.syn_ports = {}                                      # src -> Counter(puerto)
         self.hosts = Counter()
 
     def es_local(self, ip):
         r = self._cache.get(ip)
         if r is None:
+            if len(self._cache) >= MAX_CACHE_IP:
+                self._cache.clear()
             a = ipaddress.ip_address(ip)
             r = self._cache[ip] = any(a in n for n in self.nets)
         return r
 
     def _dns_query(self, p):
+        if p.src not in self.dns and (len(self.dns) >= MAX_HOSTS or not self.pres.pedir(5)):
+            return
         d = self.dns[p.src]
         d["total"] += 1
         if d["t0"] is None:
@@ -128,31 +166,70 @@ class Analizador:
             self.t_first = p.ts
         self.t_last = p.ts
         src_local, dst_local = self.es_local(p.src), self.es_local(p.dst)
-        if src_local:
+        if src_local and (p.src in self.hosts or (len(self.hosts) < MAX_HOSTS and self.pres.pedir())):
             self.hosts[p.src] += 1
         if p.proto == 17:
             if src_local and not dst_local:
-                b = self.udp_out[(p.src, p.dst)][int(p.ts)]
-                b[0] += 1
-                b[1] += p.plen
-                if b[2] is None:
-                    b[2] = p.ts
-                self.dports[(p.src, p.dst)][p.dport] += 1
+                key = (p.src, p.dst)
+                secs = self.udp_out.get(key)
+                if secs is None and len(self.udp_out) < MAX_PARES and self.pres.pedir(2):
+                    secs = self.udp_out[key]
+                if secs is not None:
+                    b = secs[int(p.ts)]
+                    b[0] += 1
+                    b[1] += p.plen
+                    if b[2] is None:
+                        b[2] = p.ts
+                    if len(secs) > MAX_SEGUNDOS:          # los segundos "fríos" nunca cuentan para una inundación
+                        for k in [k for k, v in secs.items() if v[0] < self.min_pps]:
+                            del secs[k]
+                    dp = self.dports[key]
+                    if p.dport in dp or (len(dp) < MAX_PUERTOS and self.pres.pedir()):
+                        dp[p.dport] += 1
                 if p.dport == 53:
                     self._dns_query(p)
             elif dst_local and not src_local:
-                self.udp_in[(p.dst, p.src)] += 1
+                k = (p.dst, p.src)
+                if k in self.udp_in or (len(self.udp_in) < MAX_UDP_IN and self.pres.pedir()):
+                    self.udp_in[k] += 1
             elif src_local and dst_local and p.dport == 53:
                 self._dns_query(p)
         elif p.proto == 6:
             if src_local and not dst_local:
                 if 1 <= p.plen <= 128:
-                    self.small_out[(p.src, p.dst, p.dport, p.plen)].append(p.ts)
+                    k = (p.src, p.dst, p.dport, p.plen)
+                    e = self.small_out.get(k)
+                    if e is None:
+                        if len(self.small_out) < MAX_CLAVES and self.pres.pedir(2):
+                            self.small_out[k] = {"ev": [p.ts], "last": p.ts}
+                    else:
+                        if p.ts - e["last"] > 2.0 and len(e["ev"]) < MAX_EVENTOS:   # un latido puede venir en pareja
+                            e["ev"].append(p.ts)
+                        e["last"] = p.ts
                 if p.flags & 0x12 == 0x02:
-                    self.syn_win[p.src][int(p.ts // 10)].add((p.dst, p.dport))
-                    self.syn_ports[p.src][p.dport] += 1
+                    self._syn(p)
             elif dst_local and not src_local and 1 <= p.plen <= 300:
-                self.small_in[p.dst].append((p.ts, p.src, p.sport, p.plen))
+                q = self.small_in.get(p.dst)
+                if q is None and len(self.small_in) < MAX_HOSTS and self.pres.pedir(20):
+                    q = self.small_in[p.dst] = deque(maxlen=MAX_ENTRANTES)
+                if q is not None:
+                    q.append((p.ts, p.src, p.sport, p.plen))
+
+    def _syn(self, p):
+        r = self.syn.get(p.src)
+        if r is None:
+            if len(self.syn) >= MAX_HOSTS or not self.pres.pedir(50):
+                return
+            r = self.syn[p.src] = {"w": int(p.ts // 10), "set": set(), "max": 0}
+        w = int(p.ts // 10)
+        if w != r["w"]:                                       # cambió la ventana de 10 s: se guarda el máximo
+            r["max"] = max(r["max"], len(r["set"]))
+            r["w"], r["set"] = w, set()
+        if len(r["set"]) < MAX_VENTANA_SYN:
+            r["set"].add((p.dst, p.dport))
+        sp = self.syn_ports.setdefault(p.src, Counter())
+        if p.dport in sp or len(sp) < 2000:
+            sp[p.dport] += 1
 
     def resultado(self, nombre="captura", activo_s=None):
         """Devuelve el resultado actual. No modifica el estado: se puede llamar muchas veces."""
@@ -200,13 +277,10 @@ class Analizador:
                          "victim": dst, "device": src}))
 
         # ---- latidos periódicos
-        for (src, dst, dport, plen), ts in self.small_out.items():
+        for (src, dst, dport, plen), e in self.small_out.items():
             if not want(src):
                 continue
-            ev = [ts[0]] if ts else []
-            for prev, t in zip(ts, ts[1:]):
-                if t - prev > 2.0:  # silencio de más de 2 s: empieza un latido nuevo (puede venir en pareja)
-                    ev.append(t)
+            ev = e["ev"]
             if len(ev) < 4:
                 continue
             gaps = [b - a for a, b in zip(ev, ev[1:])]
@@ -248,10 +322,10 @@ class Analizador:
                     {"src": src, "public": d["pub"], "total": d["total"]}))
 
         # ---- barridos SYN
-        for src, win in self.syn_win.items():
+        for src, r in self.syn.items():
             if not want(src):
                 continue
-            worst = max((len(v) for v in win.values()), default=0)
+            worst = max(r["max"], len(r["set"]))
             if worst >= 50:
                 ports = self.syn_ports[src].most_common(3)
                 findings.append(Finding(

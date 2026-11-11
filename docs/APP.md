@@ -118,7 +118,8 @@ Para que un **verde** valga, la captura debe cubrir **10 minutos o más**; una c
 
 - Captura **solo redes y dispositivos propios o con permiso expreso** del dueño. Avisa al cliente antes de capturar.
 - Los informes y las capturas contienen IP, MAC y nombres. No los publiques sin quitar esos datos.
-- La ventana es una página local que solo escucha en `127.0.0.1` y rechaza peticiones con `Host` u `Origin` ajenos (protege contra otras webs abiertas en el navegador). Al cerrar la ventana, la aplicación termina.
+- La ventana es una página local que solo escucha en `127.0.0.1`, exige un secreto de sesión y rechaza peticiones con `Host` u `Origin` ajenos (protege contra otras webs y otros programas del PC). Al cerrar la ventana, la aplicación termina. Detalle en [SEGURIDAD.md](SEGURIDAD.md).
+- No abras el enlace del servidor en otro navegador ni lo compartas: lleva el secreto de la sesión.
 
 ## Solución de problemas
 

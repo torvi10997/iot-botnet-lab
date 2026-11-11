@@ -11,6 +11,7 @@ import time
 from .analyzer import analyze
 from .informe import render_html, resumen_consola, semaforo
 from .pcapio import read_packets
+from . import sistema
 
 SEGMENTO_S = 20
 MAC_RE = re.compile(r"^([0-9a-f]{2}[:-]){5}[0-9a-f]{2}$", re.I)
@@ -27,8 +28,9 @@ PASOS ANTES DE EMPEZAR (en la laptop del técnico)
 
 
 def buscar_tshark():
-    for c in (shutil.which("tshark"), r"C:\Program Files\Wireshark\tshark.exe",
-              r"C:\Program Files (x86)\Wireshark\tshark.exe", "/usr/bin/tshark"):
+    # primero las rutas de instalación; el PATH se usa sin mirar el directorio actual (ver sistema.py)
+    for c in (r"C:\Program Files\Wireshark\tshark.exe", r"C:\Program Files (x86)\Wireshark\tshark.exe",
+              "/usr/bin/tshark", sistema.buscar_en_path("tshark")):
         if c and os.path.exists(c):
             return c
     return None
@@ -51,7 +53,7 @@ def interfaz_hotspot(interfaces):
     ps = ("(Get-NetIPAddress -AddressFamily IPv4 | Where-Object IPAddress -eq '192.168.137.1' | "
           "ForEach-Object { (Get-NetAdapter -InterfaceIndex $_.InterfaceIndex).InterfaceGuid })")
     try:
-        g = subprocess.run(["powershell", "-NoProfile", "-Command", ps], capture_output=True,
+        g = subprocess.run([sistema.POWERSHELL, "-NoProfile", "-Command", ps], capture_output=True,
                            text=True, timeout=20).stdout.strip().lower()
     except Exception:
         return None

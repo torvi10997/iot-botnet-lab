@@ -72,9 +72,7 @@ El código de salida es `2` si el veredicto es *sospechoso*, útil para scripts.
 
 ## Seguridad de la propia aplicación
 
-La ventana es una página local que solo escucha en `127.0.0.1` y rechaza peticiones con `Host` u `Origin` ajenos
-(protege contra DNS rebinding y contra otras webs abiertas en el navegador). Termina y detiene la captura al
-cerrar la ventana. No envía datos a ningún servidor.
+La ventana es una página local que solo escucha en `127.0.0.1`. Exige un **secreto de sesión** (otro programa o usuario del PC no puede usarla), rechaza peticiones de otras webs, tiene límites de memoria frente a dispositivos hostiles y no envía datos a ningún servidor. Se revisó con pruebas de ataque y con datos hostiles: ver [`docs/SEGURIDAD.md`](docs/SEGURIDAD.md) (hallazgos, correcciones y límites) y [`SECURITY.md`](SECURITY.md) para reportar un problema. No es una auditoría de terceros.
 
 ## Qué detecta
 
@@ -115,6 +113,7 @@ Captura solo **redes y dispositivos propios o con autorización expresa** del du
 
 ## Documentación
 
+- [`docs/SEGURIDAD.md`](docs/SEGURIDAD.md): qué se revisó de la seguridad de la aplicación, qué se encontró y qué límites quedan.
 - [`docs/APP.md`](docs/APP.md): **guía completa de la aplicación**: cómo funciona, uso paso a paso, qué muestra cada parte de la pantalla, puertos abiertos, límites y solución de problemas.
 - [`docs/VISITA.md`](docs/VISITA.md): guía del técnico para revisar un dispositivo en casa del cliente (modo visita, semáforo, consentimiento).
 - [`docs/CAPTURA.md`](docs/CAPTURA.md): cómo capturar el tráfico de un TV box u otro dispositivo (hotspot en Windows, tshark).
