@@ -128,7 +128,7 @@ class Estado:
         self._t_run = None
         self._loc = Analizador()
         self.clientes = {}                    # MAC -> (nombre, ip) según Windows
-        self.gw_mac = None                    # MAC del router (no se cuenta como aparato)
+        self.gw_mac = None                    # MAC del router (no se cuenta como dispositivo)
         self.solo_archivo = False             # True si se está viendo una captura abierta, no una en vivo
 
     # ---- tiempo activo (sin contar las pausas)
@@ -353,7 +353,7 @@ foreach ($c in $m.GetTetheringClients()) {
 
 
 def clientes_hotspot():
-    """MAC -> (nombre, ip) de los aparatos conectados al hotspot de Windows."""
+    """MAC -> (nombre, ip) de los dispositivos conectados al hotspot de Windows."""
     if os.name != "nt":
         return {}
     try:

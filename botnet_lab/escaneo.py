@@ -1,8 +1,8 @@
-"""Revisión de puertos abiertos de un aparato (TCP), con explicaciones en lenguaje simple.
+"""Revisión de puertos abiertos de un dispositivo (TCP), con explicaciones en lenguaje simple.
 
-Solo se debe usar en aparatos propios o con permiso de su dueño. No explota nada: abre una conexión TCP,
+Solo se debe usar en dispositivos propios o con permiso de su dueño. No explota nada: abre una conexión TCP,
 lee el saludo del servicio si lo hay y, en el puerto 5555, hace el saludo del protocolo ADB para saber si
-pide clave (no ejecuta ningún comando en el aparato).
+pide clave (no ejecuta ningún comando en el dispositivo).
 """
 import socket
 import struct
@@ -14,11 +14,11 @@ from concurrent.futures import ThreadPoolExecutor
 # riesgo: "alto", "medio", "bajo", "info"
 PUERTOS = {
     21: ("FTP", "medio", "Transferencia de archivos sin cifrar.", "Apagarlo si no se usa."),
-    22: ("SSH", "medio", "Acceso remoto por consola. Si el aparato lo trae activo y con clave por defecto, es una puerta de entrada.", "Cambiar la clave por defecto o desactivarlo."),
-    23: ("Telnet", "alto", "Acceso remoto SIN cifrar. Es la puerta que más usa el malware tipo Mirai.", "Desactivarlo. Un aparato doméstico no debería tenerlo."),
-    25: ("SMTP", "medio", "Envío de correo. Un aparato doméstico no debería ofrecerlo.", "Desactivarlo."),
-    53: ("DNS", "bajo", "El aparato responde consultas de nombres (actúa como un pequeño servidor DNS).", "Normal en routers; raro en un TV box."),
-    80: ("HTTP", "bajo", "Panel web sin cifrar (configuración o administración del aparato).", "Cambiar la clave de administración; que no sea accesible desde internet."),
+    22: ("SSH", "medio", "Acceso remoto por consola. Si el dispositivo lo trae activo y con clave por defecto, es una puerta de entrada.", "Cambiar la clave por defecto o desactivarlo."),
+    23: ("Telnet", "alto", "Acceso remoto SIN cifrar. Es la puerta que más usa el malware tipo Mirai.", "Desactivarlo. Un dispositivo doméstico no debería tenerlo."),
+    25: ("SMTP", "medio", "Envío de correo. Un dispositivo doméstico no debería ofrecerlo.", "Desactivarlo."),
+    53: ("DNS", "bajo", "El dispositivo responde consultas de nombres (actúa como un pequeño servidor DNS).", "Normal en routers; raro en un TV box."),
+    80: ("HTTP", "bajo", "Panel web sin cifrar (configuración o administración del dispositivo).", "Cambiar la clave de administración; que no sea accesible desde internet."),
     81: ("HTTP alterno", "bajo", "Panel web en puerto alterno.", "Revisar quién lo usa."),
     110: ("POP3", "medio", "Correo sin cifrar.", "Desactivarlo."),
     135: ("RPC de Windows", "medio", "Servicio interno de Windows.", "No debería ser visible en la red."),
@@ -28,14 +28,14 @@ PUERTOS = {
     445: ("SMB", "alto", "Compartir archivos de Windows. Muchos gusanos lo explotan.", "Cerrarlo si no es un PC que comparte archivos a propósito."),
     554: ("RTSP (cámara)", "medio", "Transmisión de video de una cámara.", "Ponerle clave y no exponerla a internet."),
     631: ("IPP (impresora)", "bajo", "Servicio de impresión.", "Normal en impresoras."),
-    1080: ("Proxy SOCKS", "alto", "Un aparato que ofrece proxy puede estar siendo usado para esconder tráfico de otros (típico de infecciones).", "Revisar de inmediato."),
+    1080: ("Proxy SOCKS", "alto", "Un dispositivo que ofrece proxy puede estar siendo usado para esconder tráfico de otros (típico de infecciones).", "Revisar de inmediato."),
     1883: ("MQTT", "medio", "Mensajería de domótica. Sin clave permite controlar sensores.", "Ponerle usuario y clave."),
     2323: ("Telnet alterno", "alto", "Variante de Telnet que usa el malware tipo Mirai.", "Desactivarlo."),
-    3128: ("Proxy HTTP", "alto", "Un aparato que ofrece proxy puede estar siendo usado para esconder tráfico de otros.", "Revisar de inmediato."),
-    3306: ("MySQL", "medio", "Base de datos. No debería estar en un aparato doméstico.", "Cerrarlo."),
+    3128: ("Proxy HTTP", "alto", "Un dispositivo que ofrece proxy puede estar siendo usado para esconder tráfico de otros.", "Revisar de inmediato."),
+    3306: ("MySQL", "medio", "Base de datos. No debería estar en un dispositivo doméstico.", "Cerrarlo."),
     3389: ("Escritorio remoto", "alto", "Control remoto de un PC Windows.", "Cerrarlo o protegerlo con clave fuerte."),
     5000: ("UPnP / panel", "bajo", "Servicio de descubrimiento o panel de un NAS.", "Revisar quién lo usa."),
-    5555: ("ADB (Android)", "alto", "Depuración de Android por red. Abierto y sin clave permite controlar el aparato por completo. Es la puerta de entrada de botnets como BADBOX y Kimwolf.", "Apagar la depuración USB/inalámbrica; si no se puede, reemplazar el aparato."),
+    5555: ("ADB (Android)", "alto", "Depuración de Android por red. Abierto y sin clave permite controlar el dispositivo por completo. Es la puerta de entrada de botnets como BADBOX y Kimwolf.", "Apagar la depuración USB/inalámbrica; si no se puede, reemplazar el dispositivo."),
     5900: ("VNC", "alto", "Control remoto del escritorio, a menudo sin cifrar.", "Cerrarlo o ponerle clave."),
     6666: ("Puerto usado por malware", "medio", "Puerto frecuente de canales de control de botnets, aunque también lo usan algunas apps.", "Averiguar qué programa lo abre."),
     6969: ("Puerto usado por malware", "medio", "Puerto visto en canales de control de botnets, aunque también lo usan algunas apps.", "Averiguar qué programa lo abre."),
@@ -69,7 +69,7 @@ _AUTH = 0x48545541
 
 def sondear_adb(ip, puerto=5555, timeout=2.5):
     """Saludo del protocolo ADB. Devuelve 'sin_clave' (grave), 'pide_clave' o 'desconocido'.
-    No ejecuta comandos: solo envía CNXN y mira si el aparato contesta CNXN (acepta) o AUTH (exige clave)."""
+    No ejecuta comandos: solo envía CNXN y mira si el dispositivo contesta CNXN (acepta) o AUTH (exige clave)."""
     datos = b"host::\x00"
     cab = struct.pack("<6I", _CNXN, 0x01000000, 256 * 1024, len(datos), sum(datos) & 0xFFFFFFFF, _CNXN ^ 0xFFFFFFFF)
     try:
@@ -164,10 +164,10 @@ def escanear(ip, puertos=None, timeout=0.7, hilos=80, progreso=None, cancelar=No
             if est == "sin_clave":
                 item["riesgo"], item["etiqueta"] = "alto", "Riesgo alto"
                 item["que_es"] = ("ADB está abierto y ACEPTA conexiones sin pedir clave: cualquiera en la red puede "
-                                  "controlar el aparato. Es exactamente la puerta que usan BADBOX y Kimwolf.")
+                                  "controlar el dispositivo. Es exactamente la puerta que usan BADBOX y Kimwolf.")
             elif est == "pide_clave":
                 item["riesgo"], item["etiqueta"] = "medio", "Riesgo medio"
-                item["que_es"] = "ADB está abierto pero exige autorización en el aparato. Mejor, pero conviene apagarlo."
+                item["que_es"] = "ADB está abierto pero exige autorización en el dispositivo. Mejor, pero conviene apagarlo."
         res.append(item)
     res.sort(key=lambda x: (RIESGO_ORDEN[x["riesgo"]], x["puerto"]))
     return res

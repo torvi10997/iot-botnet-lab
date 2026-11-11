@@ -138,18 +138,18 @@ def evaluar(d):
             enc = ps["estado"].lower() == "on"
             banda = {"TwoPointFourGigahertz": "2,4 GHz", "FiveGigahertz": "5 GHz"}.get(ps.get("banda", ""), ps.get("banda", "?"))
             if enc:
-                extra = " Algunos aparatos baratos no ven 5 GHz." if "5" in banda else ""
+                extra = " Algunos dispositivos baratos no ven 5 GHz." if "5" in banda else ""
                 r.append(_c("hotspot", "Hotspot de Windows", "ok" if not extra else "aviso",
                             "Encendido (red «%s», banda %s, %s conectados).%s" % (ps.get("ssid", ""), banda, ps.get("clientes", "0"), extra),
-                            "Si el aparato no ve la red, usa 2,4 GHz (ver siguiente punto)." if extra else ""))
+                            "Si el dispositivo no ve la red, usa 2,4 GHz (ver siguiente punto)." if extra else ""))
             else:
-                r.append(_c("hotspot", "Hotspot de Windows", "aviso", "Está apagado: el aparato no tendrá a qué conectarse.",
+                r.append(_c("hotspot", "Hotspot de Windows", "aviso", "Está apagado: el dispositivo no tendrá a qué conectarse.",
                             "Actívalo en 'Zona con cobertura inalámbrica móvil', con banda 2,4 GHz.",
                             "abrir_hotspot", "Abrir configuración del hotspot"))
             if ps.get("tipo") == "71":
                 r.append(_c("cable", "Internet del PC", "aviso",
                             "Tu PC sale a internet por WiFi. Windows obliga entonces al hotspot a usar 5 GHz, y muchos "
-                            "aparatos baratos (TV box, cámaras) solo ven 2,4 GHz.",
+                            "dispositivos baratos (TV box, cámaras) solo ven 2,4 GHz.",
                             "Conecta el PC a internet por cable de red (Ethernet). Después el hotspot podrá usar 2,4 GHz."))
             elif ps.get("tipo") == "6":
                 r.append(_c("cable", "Internet del PC", "ok", "Sale a internet por cable: el hotspot puede usar 2,4 GHz."))
@@ -190,7 +190,7 @@ def probar_captura(tshark, interfaz, segundos=4):
             return {"ok": False, "paquetes": 0, "mensaje": ("TShark no pudo capturar: " + err)[:300]}
         n = sum(1 for _ in read_packets(ruta))
         msg = ("La captura funciona: %d paquetes en %d s." % (n, segundos)) if n else (
-            "La captura funciona, pero no pasó tráfico en %d s (normal si el aparato está inactivo)." % segundos)
+            "La captura funciona, pero no pasó tráfico en %d s (normal si el dispositivo está inactivo)." % segundos)
         return {"ok": True, "paquetes": n, "mensaje": msg}
     except Exception as e:
         return {"ok": False, "paquetes": 0, "mensaje": "No se pudo probar: %s" % e}

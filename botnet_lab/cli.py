@@ -19,9 +19,9 @@ def main(argv=None):
     a.add_argument("--min-secs", type=int, default=5, help="duración mínima en segundos (5)")
     a.add_argument("--json", action="store_true", help="salida JSON")
 
-    v = sub.add_parser("visita", help="asistente para revisar un aparato en casa del cliente")
+    v = sub.add_parser("visita", help="asistente para revisar un dispositivo en casa del cliente")
     v.add_argument("--interfaz", help="interfaz de captura (por defecto, se detecta el hotspot de Windows)")
-    v.add_argument("--mac", help="MAC del aparato (captura solo su tráfico)")
+    v.add_argument("--mac", help="MAC del dispositivo (captura solo su tráfico)")
     v.add_argument("--minutos", type=float, default=15, help="duración de la captura (15)")
     v.add_argument("--salida", default="informes", help="carpeta del informe (informes)")
     v.add_argument("--guardar", action="store_true", help="conservar la captura como evidencia")
@@ -34,7 +34,7 @@ def main(argv=None):
 
     g = sub.add_parser("app", help="abre la aplicación con ventana: captura en vivo con botones")
     g.add_argument("--interfaz", help="interfaz de captura (por defecto, se detecta el hotspot de Windows)")
-    g.add_argument("--gateway", help="IP del router/hotspot que no se cuenta como aparato (192.168.137.1)")
+    g.add_argument("--gateway", help="IP del router/hotspot que no se cuenta como dispositivo (192.168.137.1)")
     g.add_argument("--abrir", nargs="+", metavar="PCAP", help="abre capturas existentes (.pcap/.pcapng) para verlas en la ventana")
     g.add_argument("--puerto", type=int, default=0, help="puerto local (por defecto, uno libre)")
     g.add_argument("--sin-ventana", action="store_true", help="solo inicia el servidor; abre la dirección en tu navegador")

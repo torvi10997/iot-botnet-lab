@@ -1,16 +1,16 @@
 # Cómo capturar el tráfico de un dispositivo sospechoso
 
-Objetivo: ver **todo** lo que el aparato envía y recibe, sin depender de que el router lo muestre. Usa solo equipos que sean tuyos o con permiso del dueño.
+Objetivo: ver **todo** lo que el dispositivo envía y recibe, sin depender de que el router lo muestre. Usa solo equipos que sean tuyos o con permiso del dueño.
 
 ## Idea general
 
-Pon tu PC en medio: el aparato se conecta a un punto de acceso que crea tu PC y tu PC sale a internet por otra interfaz. Wireshark/tshark ve todo el tráfico.
+Pon tu PC en medio: el dispositivo se conecta a un punto de acceso que crea tu PC y tu PC sale a internet por otra interfaz. Wireshark/tshark ve todo el tráfico.
 
 ## Opción A: Windows con "Zona con cobertura inalámbrica móvil"
 
 1. **Tu PC debe llegar a internet por cable** (Ethernet). Si sale por el mismo WiFi que va a compartir, Windows fuerza la banda 5 GHz y muchos TV box baratos solo ven 2,4 GHz.
 2. Ajustes → Red e Internet → Zona con cobertura inalámbrica móvil: banda **2,4 GHz**, nombre y clave simples.
-3. Conecta el aparato a ese WiFi. Comprueba que tiene IP (normalmente `192.168.137.x`).
+3. Conecta el dispositivo a ese WiFi. Comprueba que tiene IP (normalmente `192.168.137.x`).
 4. Identifica la interfaz y captura:
 
 ```powershell
@@ -36,9 +36,9 @@ Si tu switch gestionable lo permite, refleja el puerto del cliente hacia tu PC y
 
 ## Buenas prácticas
 
-- **Captura en reposo y en uso.** Pon el aparato en el menú principal 5 a 10 minutos y luego abre una app de video. Compara.
+- **Captura en reposo y en uso.** Pon el dispositivo en el menú principal 5 a 10 minutos y luego abre una app de video. Compara.
 - **Filtra por MAC, no por IP**: la IP asignada puede cambiar al reconectar (`ether host aa:bb:cc:dd:ee:ff`).
-- **Sin sorpresas**: si el aparato puede estar atacando, no dejes la captura sin vigilancia con internet real. Pon un corte automático (por ejemplo, desactivar el hotspot si supera 150 paquetes UDP por segundo en una ventana de 3 s) o limita el ancho de banda.
+- **Sin sorpresas**: si el dispositivo puede estar atacando, no dejes la captura sin vigilancia con internet real. Pon un corte automático (por ejemplo, desactivar el hotspot si supera 150 paquetes UDP por segundo en una ventana de 3 s) o limita el ancho de banda.
 - **Prueba restablecido de fábrica**: repite la captura tras un reset para saber si el comportamiento desaparece.
 - **Guarda la evidencia** (pcap, hora, MAC, versión de firmware) antes de cambiar nada.
 
@@ -59,4 +59,4 @@ Para confirmar a mano en Wireshark:
 
 Para saber **de quién es** una IP destino: `https://rdap.org/ip/<IP>` o `whois <IP>`.
 
-Para ver puertos abiertos del aparato (en tu propia red): `nmap -sV -p 1-10000,5555 <IP>`. Un puerto **5555 (ADB) abierto y sin autenticación** es una puerta de entrada típica de estas botnets.
+Para ver puertos abiertos del dispositivo (en tu propia red): `nmap -sV -p 1-10000,5555 <IP>`. Un puerto **5555 (ADB) abierto y sin autenticación** es una puerta de entrada típica de estas botnets.

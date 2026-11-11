@@ -1,4 +1,4 @@
-"""Fabricante de un aparato a partir de su MAC, usando la base que ya trae Wireshark (sin internet)."""
+"""Fabricante de un dispositivo a partir de su MAC, usando la base que ya trae Wireshark (sin internet)."""
 import subprocess
 
 _tabla = None

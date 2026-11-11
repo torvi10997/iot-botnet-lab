@@ -3,10 +3,10 @@ import datetime
 import html
 
 MIN_VERDE_S = 600      # menos de 10 min sin indicios NO se declara verde
-MIN_PAQUETES = 200     # menos tráfico que esto: el aparato casi no habló (¿MAC o interfaz equivocada?)
+MIN_PAQUETES = 200     # menos tráfico que esto: el dispositivo casi no habló (¿MAC o interfaz equivocada?)
 
 SEMAFORO = {
-    "rojo": ("ROJO", "Se encontraron señales claras de un aparato comprometido",
+    "rojo": ("ROJO", "Se encontraron señales claras de un dispositivo comprometido",
              "#b3201f", "#fbe9e8"),
     "amarillo": ("AMARILLO", "Hay señales que conviene revisar",
                  "#8a5a00", "#fdf3d8"),
@@ -14,39 +14,39 @@ SEMAFORO = {
               "#1d6b3a", "#e6f4ea"),
     "corto": ("NO CONCLUYENTE", "La captura fue demasiado corta para opinar",
               "#52514e", "#eceae4"),
-    "sin_datos": ("NO CONCLUYENTE", "El aparato casi no generó tráfico",
+    "sin_datos": ("NO CONCLUYENTE", "El dispositivo casi no generó tráfico",
                   "#52514e", "#eceae4"),
 }
 
 ACCIONES = {
     "rojo": [
-        "Desconectar el aparato de internet y de la red de la casa ahora.",
+        "Desconectar el dispositivo de internet y de la red de la casa ahora.",
         "No usarlo para entrar a cuentas, bancos ni compras mientras siga conectado.",
         "Reemplazarlo por un equipo certificado (Google TV, Fire TV, Apple TV). Restablecerlo de fábrica "
         "no garantiza que quede limpio.",
         "Cambiar la clave del WiFi y la del router; apagar la depuración ADB si existe.",
-        "Revisar los demás aparatos de la casa (teléfonos, otras cajas, cámaras).",
-        "Si el aparato sigue conectado, el operador puede limitar el servicio para proteger a otros clientes.",
+        "Revisar los demás dispositivos de la casa (teléfonos, otras cajas, cámaras).",
+        "Si el dispositivo sigue conectado, el operador puede limitar el servicio para proteger a otros clientes.",
     ],
     "amarillo": [
-        "Repetir la revisión con una captura más larga (15 minutos o más) y con el aparato en uso.",
+        "Repetir la revisión con una captura más larga (15 minutos o más) y con el dispositivo en uso.",
         "Confirmar a quién pertenecen los destinos señalados en el detalle técnico.",
         "Mientras tanto, mantener el firmware actualizado y apagar la depuración ADB.",
     ],
     "verde": [
-        "No es una garantía: un aparato infectado puede estar callado durante un rato.",
+        "No es una garantía: un dispositivo infectado puede estar callado durante un rato.",
         "Mantener el firmware actualizado y apagar la depuración ADB.",
         "Preferir equipos certificados; los genéricos baratos son los que más vienen comprometidos.",
         "Si más adelante notan lentitud sin explicación o avisos del operador, repetir la revisión.",
     ],
     "corto": [
-        "Repetir la captura durante al menos 10 minutos, con el aparato encendido y en uso (por ejemplo, "
+        "Repetir la captura durante al menos 10 minutos, con el dispositivo encendido y en uso (por ejemplo, "
         "reproduciendo video).",
     ],
     "sin_datos": [
-        "Verificar que el aparato esté conectado al punto de acceso de la laptop y que la MAC y la interfaz "
+        "Verificar que el dispositivo esté conectado al punto de acceso de la laptop y que la MAC y la interfaz "
         "elegidas sean las correctas.",
-        "Repetir la captura con el aparato en uso.",
+        "Repetir la captura con el dispositivo en uso.",
     ],
 }
 
@@ -70,15 +70,15 @@ def explicar(f):
     e, c = f["evidence"], f["code"]
     if c == "UDP_FLOOD":
         if e["reply_ratio"] < 0.05:
-            return ("El aparato envió %d paquetes en unos %d segundos hacia el servidor externo %s, sin recibir "
+            return ("El dispositivo envió %d paquetes en unos %d segundos hacia el servidor externo %s, sin recibir "
                     "respuesta. Eso es lo que hace un equipo usado para atacar a otros." %
                     (e["packets"], e["seconds"], e["dst"]))
-        return ("El aparato envió %d paquetes en unos %d segundos hacia el servidor externo %s y recibió muy "
+        return ("El dispositivo envió %d paquetes en unos %d segundos hacia el servidor externo %s y recibió muy "
                 "pocas respuestas (%d%% de lo enviado). Puede ser un ataque, pero también tráfico legítimo muy "
                 "intenso: conviene confirmarlo." %
                 (e["packets"], e["seconds"], e["dst"], round(e["reply_ratio"] * 100)))
     if c == "C2_ORDER":
-        return ("Justo antes de atacar, el aparato recibió un mensaje de %d bytes de %s. Indica que un servidor "
+        return ("Justo antes de atacar, el dispositivo recibió un mensaje de %d bytes de %s. Indica que un servidor "
                 "remoto le dio la orden." % (e["order_bytes"], e["controller"]))
     if c == "BEACON":
         if e["dport"] in (80, 443, 8080, 8443):
@@ -112,12 +112,12 @@ def frases(findings):
         if len(g) == 1:
             out.append((sev, explicar(g[0])))
         elif code == "UDP_FLOOD" and any(f["evidence"]["reply_ratio"] >= 0.05 for f in g):
-            out.append((sev, "El aparato lanzó %d ráfagas de tráfico UDP con pocas respuestas. Puede ser un ataque "
+            out.append((sev, "El dispositivo lanzó %d ráfagas de tráfico UDP con pocas respuestas. Puede ser un ataque "
                         "o tráfico legítimo muy intenso: conviene confirmarlo en el detalle técnico." % len(g)))
         elif code == "UDP_FLOOD":
             pk = sum(f["evidence"]["packets"] for f in g)
             dst = sorted({f["evidence"]["dst"] for f in g})
-            out.append((sev, "El aparato lanzó %d ráfagas de tráfico (%d paquetes en total) hacia %d servidores "
+            out.append((sev, "El dispositivo lanzó %d ráfagas de tráfico (%d paquetes en total) hacia %d servidores "
                         "externos (%s), sin recibir respuesta. Eso es lo que hace un equipo usado para atacar a otros."
                         % (len(g), pk, len(dst), ", ".join(dst))))
         elif code == "C2_ORDER":
@@ -161,7 +161,7 @@ def render_html(res, ref="", tecnico="", fecha=None, capturado=True, puertos=Non
             cuerpo = ('<table><tr><th>Puerto</th><th>Servicio</th><th>Riesgo</th><th>Qué significa</th></tr>%s</table>' % filas)
         else:
             cuerpo = "<p>No se encontraron puertos TCP abiertos.</p>"
-        puertos_html = ("<h2>Puertos abiertos del aparato</h2><p class='meta'>Revisión de %d puertos TCP en %s "
+        puertos_html = ("<h2>Puertos abiertos del dispositivo</h2><p class='meta'>Revisión de %d puertos TCP en %s "
                         "(%d s).</p>%s<p class='lim'>Un puerto cerrado no garantiza seguridad: solo se revisó TCP.</p>"
                         % (puertos["total"], esc(puertos["ip"]), puertos["segundos"], cuerpo))
     return """<!doctype html>
@@ -192,8 +192,8 @@ def render_html(res, ref="", tecnico="", fecha=None, capturado=True, puertos=Non
 <ul>%(acc)s</ul>
 
 <h2>Qué se hizo</h2>
-<p>Se observó el tráfico del aparato durante <b>%(dur)s</b> (%(pk)d paquetes en total). %(cap)s</p>
-<p class="lim"><b>Límites:</b> esta revisión no es un antivirus. Un aparato infectado puede permanecer callado
+<p>Se observó el tráfico del dispositivo durante <b>%(dur)s</b> (%(pk)d paquetes en total). %(cap)s</p>
+<p class="lim"><b>Límites:</b> esta revisión no es un antivirus. Un dispositivo infectado puede permanecer callado
 durante la captura; por eso un resultado verde significa solo "no se vieron señales en este tiempo".</p>
 
 %(puertos_html)s

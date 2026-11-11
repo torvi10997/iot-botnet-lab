@@ -188,7 +188,7 @@ class App:
                     return {"ok": False, "error": "No encuentro TShark. Instala Wireshark y marca 'TShark'."}
                 iface = cuerpo.get("interfaz") or self.sugerida
                 if not iface:
-                    return {"ok": False, "error": "Elige la interfaz donde está conectado el aparato."}
+                    return {"ok": False, "error": "Elige la interfaz donde está conectado el dispositivo."}
                 if self.captura is None:
                     self.guardar = bool(cuerpo.get("guardar"))
                     if self.guardar:
@@ -203,14 +203,14 @@ class App:
         return {"ok": False, "error": "Acción no válida"}
 
     def lanzar_escaneo(self, mac, modo):
-        """Revisa los puertos abiertos de un aparato YA detectado en la red local (nunca de una IP cualquiera)."""
+        """Revisa los puertos abiertos de un dispositivo YA detectado en la red local (nunca de una IP cualquiera)."""
         modo = "completo" if modo == "completo" else "rapido"
         d = next((x for x in self.estado.lista(q=mac)["items"] if x["mac"] == mac), None)
         ip = d["ip"] if d else None
         if not ip or ip == "-":
             return {"ok": False, "error": "Ese dispositivo todavía no tiene una dirección IP conocida."}
         if not self.estado._loc.es_local(ip) or ip == self.estado.gw:
-            return {"ok": False, "error": "Solo se revisan aparatos de la red local."}
+            return {"ok": False, "error": "Solo se revisan dispositivos de la red local."}
         previo = self.escaneos.get(mac)
         if previo and previo.estado == "corriendo":
             return {"ok": True, "ya_en_curso": True}

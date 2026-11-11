@@ -228,7 +228,7 @@ function pintarAviso() {
   if (!r.tshark) h += `<div class="banner err"><b>Falta Wireshark (TShark).</b> Descárgalo de wireshark.org y marca <b>TShark</b> al instalar. Luego reabre esta aplicación.</div>`;
   else if (!r.hotspot && c.estado === "inactiva") {
     const opts = r.interfaces.map((i) => `<option value="${esc(i.id)}" ${i.id === interfazElegida ? "selected" : ""}>${esc(i.nombre)}</option>`).join("");
-    h += `<div class="banner"><b>No detecté el hotspot de Windows.</b> Actívalo en Configuración, Red e Internet, <i>Zona con cobertura inalámbrica móvil</i>, y conecta el aparato.
+    h += `<div class="banner"><b>No detecté el hotspot de Windows.</b> Actívalo en Configuración, Red e Internet, <i>Zona con cobertura inalámbrica móvil</i>, y conecta el dispositivo.
       O elige a mano la interfaz: <select onchange="interfazElegida=this.value"><option value="">(elegir)</option>${opts}</select></div>`;
   }
   if (est.carga && est.carga.activa) h += `<div class="banner"><b>Cargando captura…</b> ${fmt(est.carga.paquetes)} paquetes leídos de ${esc(est.carga.archivos.join(", "))}. Las capturas grandes pueden tardar un poco.</div>`;
@@ -236,7 +236,7 @@ function pintarAviso() {
   if (est.origen) {
     const o = est.origen;
     h += `<div class="banner" style="background:var(--soft);border-color:var(--line)"><b>Estás viendo una captura abierta:</b> ${esc(o.archivos.join(", "))} (${fmt(o.paquetes)} paquetes).
-      ${o.router_mac ? `Router ${o.automatico ? "detectado" : "indicado"}: ${esc(o.router_ip || "IP desconocida")} · <span class="mono">${esc(o.router_mac)}</span> (no se cuenta como aparato).` : `<b>No se pudo detectar el router</b>${o.router_ip ? "; se usó " + esc(o.router_ip) : ""}. Si ves al router como un aparato, vuelve a abrir la captura indicando su IP.`}</div>`;
+      ${o.router_mac ? `Router ${o.automatico ? "detectado" : "indicado"}: ${esc(o.router_ip || "IP desconocida")} · <span class="mono">${esc(o.router_mac)}</span> (no se cuenta como dispositivo).` : `<b>No se pudo detectar el router</b>${o.router_ip ? "; se usó " + esc(o.router_ip) : ""}. Si ves al router como un dispositivo, vuelve a abrir la captura indicando su IP.`}</div>`;
   }
   if (c.error) h += `<div class="banner err"><b>No se pudo capturar:</b> ${esc(c.error)}<br>Prueba abrir la aplicación como administrador.</div>`;
   if ($("#aviso").dataset.k !== h) { $("#aviso").innerHTML = h; $("#aviso").dataset.k = h; }
@@ -247,7 +247,7 @@ function pintarLista() {
   const d = est.dispositivos;
   if (!sel || !d.some((x) => x.mac === sel)) { const p = d.find((x) => x.visto); sel = p ? p.mac : (d[0] ? d[0].mac : null); }
   $("#cuenta").textContent = est.total_dispositivos ? (d.length < est.total_dispositivos ? "Mostrando " + d.length + " de " + est.total_dispositivos : est.total_dispositivos + " dispositivo" + (est.total_dispositivos > 1 ? "s" : "")) + (est.sospechosos ? " · " + est.sospechosos + " sospechoso" + (est.sospechosos > 1 ? "s" : "") : "") : "";
-  if (!d.length) { $("#lista").innerHTML = `<div class="vacio">Aún no hay aparatos.<br>Conecta tu aparato al WiFi del hotspot y pulsa <b>Iniciar captura</b>.</div>`; return; }
+  if (!d.length) { $("#lista").innerHTML = `<div class="vacio">Aún no hay dispositivos.<br>Conecta tu dispositivo al WiFi del hotspot y pulsa <b>Iniciar captura</b>.</div>`; return; }
   const sem = {rojo: "Rojo", amarillo: "Amarillo", verde: "Verde", corto: "Sin concluir", sin_datos: "Sin tráfico"};
   $("#lista").innerHTML = d.map((x) => `
     <div class="dev ${x.mac === sel ? "sel" : ""}" onclick="sel='${esc(x.mac)}';ultimoPkt=0;filas=[];tick()">
@@ -260,7 +260,7 @@ function pintarLista() {
 
 // ---------------------------------------------------------------- detalle
 function banda(pps) {
-  if (pps < 5) return ["En reposo", "Casi no habla. Es lo esperable cuando nadie usa el aparato."];
+  if (pps < 5) return ["En reposo", "Casi no habla. Es lo esperable cuando nadie usa el dispositivo."];
   if (pps < 300) return ["Uso normal", "Navegar, mensajería o música generan este ritmo."];
   if (pps < 1500) return ["Intenso", "Típico de ver video o descargar. Es normal si el destino responde."];
   return ["Muy alto", "Solo es sospechoso si va casi todo a un mismo destino que NO responde."];
@@ -282,7 +282,7 @@ function grafica(serie) {
 function frasePrincipal(d) {
   if (!d.categorias.length) return "Todavía no hay tráfico para describir.";
   const c = d.categorias[0], s = c.servicios[0];
-  return `Casi todo lo que hace este aparato ahora es <b>${esc(c.nombre.toLowerCase())}</b> (${c.pct}% del tráfico)${s ? `, sobre todo <b>${esc(s)}</b>` : ""}.`;
+  return `Casi todo lo que hace este dispositivo ahora es <b>${esc(c.nombre.toLowerCase())}</b> (${c.pct}% del tráfico)${s ? `, sobre todo <b>${esc(s)}</b>` : ""}.`;
 }
 
 // ---------------------------------------------------------------- puertos abiertos
@@ -296,13 +296,13 @@ function insigniaPuertos() {
 }
 function pestanaPuertos(d) {
   const p = puertosDatos, corriendo = p.estado === "corriendo";
-  let h = `<div class="nota">Revisa a qué servicios de red responde este aparato (por ejemplo, depuración ADB o Telnet). Los aparatos infectados suelen tener alguno abierto.
-    <b>Úsalo solo en aparatos tuyos o con permiso de su dueño.</b> Se revisan puertos TCP; un puerto cerrado no garantiza seguridad.</div>
+  let h = `<div class="nota">Revisa a qué servicios de red responde este dispositivo (por ejemplo, depuración ADB o Telnet). Los dispositivos infectados suelen tener alguno abierto.
+    <b>Úsalo solo en dispositivos tuyos o con permiso de su dueño.</b> Se revisan puertos TCP; un puerto cerrado no garantiza seguridad.</div>
     <div style="margin:8px 0">
       <button class="btn primario" ${corriendo ? "disabled" : ""} onclick="escanear('rapido')">Revisión rápida (≈10 s)</button>
       <button class="btn" ${corriendo ? "disabled" : ""} onclick="escanear('completo')" title="Puertos 1 a 10 000 y los más explotados">Revisión completa (1–2 min)</button>
       ${corriendo ? `<button class="btn peligro" onclick="cancelarEscaneo()">Cancelar</button>` : ""}</div>`;
-  if (p.estado === "nunca") return h + `<div class="vacio">Todavía no se ha revisado este aparato.</div>`;
+  if (p.estado === "nunca") return h + `<div class="vacio">Todavía no se ha revisado este dispositivo.</div>`;
   if (corriendo) h += `<div class="prog">Revisando ${esc(p.ip)}: ${fmt(p.hecho)} de ${fmt(p.total)} puertos.
       <div class="barra"><i style="width:${p.total ? 100 * p.hecho / p.total : 0}%"></i></div></div>`;
   if (p.estado === "error") return h + `<div class="banner err">No se pudo revisar: ${esc(p.error)}</div>`;
@@ -310,7 +310,7 @@ function pestanaPuertos(d) {
     const r = p.resumen;
     h += `<div class="frase">${p.estado === "cancelado" ? "Revisión cancelada. " : ""}Se revisaron ${fmt(p.total)} puertos TCP de ${esc(p.ip)} en ${p.segundos} s:
       <b>${r.abiertos}</b> abierto${r.abiertos === 1 ? "" : "s"}${r.abiertos ? ` (${r.alto} de riesgo alto, ${r.medio} medio, ${r.bajo} bajo)` : ""}.</div>`;
-    if (!p.resultados.length) h += `<div class="nota">No se encontró ningún puerto TCP abierto en la lista revisada. Es lo ideal para un aparato doméstico.</div>`;
+    if (!p.resultados.length) h += `<div class="nota">No se encontró ningún puerto TCP abierto en la lista revisada. Es lo ideal para un dispositivo doméstico.</div>`;
     else h += `<div class="scroll"><table><tr><th>Puerto</th><th>Servicio</th><th>Riesgo</th><th>Qué significa y qué hacer</th></tr>
       ${p.resultados.map((x) => `<tr class="${RIESGO_CLASE[x.riesgo]}"><td class="num mono"><b>${x.puerto}</b></td><td>${esc(x.servicio)}${x.banner ? `<br><span class="mono" style="color:var(--ink3)">${esc(x.banner)}</span>` : ""}</td>
         <td><b>${esc(x.etiqueta)}</b>${x.extra === "sin_clave" ? "<br>Sin clave" : x.extra === "pide_clave" ? "<br>Pide clave" : ""}</td>
@@ -366,20 +366,20 @@ function pastelProtocolos(d) {
 }
 function notaProtocolos(d) {
   const u = d.protocolos.find((x) => x.nombre === "UDP"), pu = u ? u.pct : 0;
-  const t = pu >= 50 ? "Aquí domina <b>UDP</b>. Es normal si el aparato ve video, hace llamadas o juega en línea (YouTube usa QUIC, que va sobre UDP). Lo que no es normal es UDP enviado a gran velocidad a un solo destino que nunca responde."
+  const t = pu >= 50 ? "Aquí domina <b>UDP</b>. Es normal si el dispositivo ve video, hace llamadas o juega en línea (YouTube usa QUIC, que va sobre UDP). Lo que no es normal es UDP enviado a gran velocidad a un solo destino que nunca responde."
     : "Aquí domina <b>TCP</b>, típico de navegación, mensajería y correo: cada paquete se confirma.";
   return `<div class="frase" style="margin-top:12px">${t}</div>`;
 }
 function notaDireccion(d) {
   const t = d.totales, sube = t.bo > t.bi * 2 && t.bo > 1048576;
-  const x = sube ? "<b>Ojo:</b> este aparato envía mucho más de lo que recibe. Eso es raro salvo que esté subiendo video o copias de seguridad; en un aparato infectado puede indicar un ataque de inundación."
-    : "Lo normal en un aparato doméstico es <b>bajar mucho más de lo que sube</b> (ver video, abrir páginas). Si sube mucho y casi no baja, conviene revisar a dónde envía.";
+  const x = sube ? "<b>Ojo:</b> este dispositivo envía mucho más de lo que recibe. Eso es raro salvo que esté subiendo video o copias de seguridad; en un dispositivo infectado puede indicar un ataque de inundación."
+    : "Lo normal en un dispositivo doméstico es <b>bajar mucho más de lo que sube</b> (ver video, abrir páginas). Si sube mucho y casi no baja, conviene revisar a dónde envía.";
   return `<div class="frase" style="margin-top:12px">${x}</div>`;
 }
 function pastelDireccion(d) {
   const t = d.totales, tot = (t.bo + t.bi) || 1;
-  const it = [{l: "Baja (lo que recibe)", v: t.bi, p: Math.round(100 * t.bi / tot), c: "--entra", x: kb(t.bi), t: "Datos que llegan al aparato: video, páginas, descargas."},
-              {l: "Sube (lo que envía)", v: t.bo, p: Math.round(100 * t.bo / tot), c: "--sale", x: kb(t.bo), t: "Datos que salen del aparato. Un aparato que SOLO sube mucho y no recibe nada merece atención."}];
+  const it = [{l: "Baja (lo que recibe)", v: t.bi, p: Math.round(100 * t.bi / tot), c: "--entra", x: kb(t.bi), t: "Datos que llegan al dispositivo: video, páginas, descargas."},
+              {l: "Sube (lo que envía)", v: t.bo, p: Math.round(100 * t.bo / tot), c: "--sale", x: kb(t.bo), t: "Datos que salen del dispositivo. Un dispositivo que SOLO sube mucho y no recibe nada merece atención."}];
   return pastel(it, "", "", true);
 }
 
@@ -408,9 +408,9 @@ function pintarDetalle(d) {
 
   <div class="fila2">
     <div class="card"><h3>Ritmo en los últimos 2 minutos (paquetes por segundo)</h3>
-      <div class="leyenda"><span><i style="background:var(--sale)"></i>Sale del aparato</span><span><i style="background:var(--entra)"></i>Entra al aparato</span></div>
+      <div class="leyenda"><span><i style="background:var(--sale)"></i>Sale del dispositivo</span><span><i style="background:var(--entra)"></i>Entra al dispositivo</span></div>
       ${grafica(d.serie)}</div>
-    <div class="card"><h3>¿Qué está haciendo este aparato?</h3>
+    <div class="card"><h3>¿Qué está haciendo este dispositivo?</h3>
       <div class="frase">${frasePrincipal(d)}</div>
       ${pastelCategorias(d)}</div>
   </div>
@@ -424,7 +424,7 @@ function pintarDetalle(d) {
     ${[["conexiones", "Detalle de conexiones"], ["puertos", "Puertos abiertos"], ["paquetes", "Paquetes en vivo"], ["glosario", "Glosario"]].map(([k, t]) => `<button class="${tab === k ? "act" : ""}" onclick="tab='${k}';tick()">${t}</button>`).join("")}</div>
   <div class="card" id="tabcont">`;
   if (tab === "conexiones") {
-    h += `<div class="nota">Cada fila es una conversación del aparato con un servidor. Si algo envía miles de paquetes por segundo y no recibe nada, es una señal de ataque.</div>
+    h += `<div class="nota">Cada fila es una conversación del dispositivo con un servidor. Si algo envía miles de paquetes por segundo y no recibe nada, es una señal de ataque.</div>
     <div class="scroll"><table><tr><th>Destino</th><th>Qué es</th><th>Puerto</th><th class="num">Sale</th><th class="num">Entra</th><th class="num">pps</th></tr>
     ${d.conexiones.map((c) => { const sr = c.pps > 300 && c.pi < c.po * 0.05;
       return `<tr class="${sr ? "alerta" : ""}${!c.activa ? " inactiva" : ""}" title="${esc(c.explicacion)}">
@@ -501,11 +501,11 @@ async function chequearRequisitos() {
 function abrirModalCaptura() {
   modal = "abrir";
   mostrarModal(`<h2>Abrir una captura del router</h2>
-    <p>Sirve para analizar el tráfico de <b>muchos aparatos a la vez</b> desde una captura hecha en el router o en un switch, sin necesidad del hotspot. La app los muestra con los <b>sospechosos primero</b>.</p>
+    <p>Sirve para analizar el tráfico de <b>muchos dispositivos a la vez</b> desde una captura hecha en el router o en un switch, sin necesidad del hotspot. La app los muestra con los <b>sospechosos primero</b>.</p>
     <p class="nota"><b>Cómo obtenerla en MikroTik</b> (ejemplo; ajusta los nombres a tu equipo). Para un solo cliente, filtra por su MAC:</p>
-    <pre class="cod">/tool sniffer set filter-interface=&lt;interfaz-LAN&gt; filter-mac-address=&lt;MAC-del-aparato&gt; file-name=captura file-limit=50000
+    <pre class="cod">/tool sniffer set filter-interface=&lt;interfaz-LAN&gt; filter-mac-address=&lt;MAC-del-dispositivo&gt; file-name=captura file-limit=50000
 /tool sniffer start
-# deja pasar 10 a 15 minutos con el aparato en uso
+# deja pasar 10 a 15 minutos con el dispositivo en uso
 /tool sniffer stop</pre>
     <p class="nota">Luego descarga <span class="mono">captura.pcap</span> desde <i>Files</i>. También sirven capturas de Wireshark (.pcap, .pcapng).</p>
     <label for="gw" style="font-weight:600">IP del router (opcional)</label>
@@ -528,13 +528,13 @@ async function tick() {
   try {
     est = await api("/api/estado" + (q ? "?q=" + encodeURIComponent(q) : ""));
     pintarCabecera(); pintarAviso(); pintarLista();
-    if (!sel) { $("#detalle").innerHTML = `<div class="vacio"><b>Cómo empezar</b><ol><li>Activa el hotspot de Windows y conecta el aparato que quieres revisar.</li><li>Pon el aparato en uso (por ejemplo, reproduce un video).</li><li>Pulsa <b>Iniciar captura</b> y mira qué hace.</li></ol></div>`; return; }
+    if (!sel) { $("#detalle").innerHTML = `<div class="vacio"><b>Cómo empezar</b><ol><li>Activa el hotspot de Windows y conecta el dispositivo que quieres revisar.</li><li>Pon el dispositivo en uso (por ejemplo, reproduce un video).</li><li>Pulsa <b>Iniciar captura</b> y mira qué hace.</li></ol></div>`; return; }
     const d = await api("/api/dispositivo?mac=" + encodeURIComponent(sel));
     puertosDatos = await api("/api/escaneo?mac=" + encodeURIComponent(sel));
     if (d.error) {   // conectado pero sin tráfico todavía: se puede revisar sus puertos antes de capturar
       const dev = est.dispositivos.find((x) => x.mac === sel) || {nombre: "Dispositivo", mac: sel, ip: "-", fabricante: ""};
       $("#detalle").innerHTML = `<div class="card cab"><h2>${esc(dev.nombre)}</h2><div class="meta"><span class="mono">${esc(dev.mac)}</span> · ${esc(dev.ip)} · ${esc(dev.fabricante)}${insigniaPuertos()}</div></div>
-        <div class="vacio" style="margin-bottom:14px">Este aparato está conectado pero todavía no genera tráfico. Pulsa <b>Iniciar captura</b> y úsalo para ver su comportamiento. Mientras tanto, puedes revisar sus puertos abiertos:</div>
+        <div class="vacio" style="margin-bottom:14px">Este dispositivo está conectado pero todavía no genera tráfico. Pulsa <b>Iniciar captura</b> y úsalo para ver su comportamiento. Mientras tanto, puedes revisar sus puertos abiertos:</div>
         <div class="card"><h3>Puertos abiertos</h3>${pestanaPuertos(dev)}</div>`;
       return;
     }

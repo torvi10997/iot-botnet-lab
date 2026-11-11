@@ -17,7 +17,7 @@
 
 Mensaje corto al cliente, sin tecnicismos:
 
-> Detectamos que uno de los aparatos de su red (probablemente el TV box) está enviando tráfico anormal a internet, como si estuviera infectado. Le recomendamos desconectarlo y usar uno de marca certificada (Google TV, Fire TV, Apple TV). Si desea, le ayudamos a revisarlo.
+> Detectamos que uno de los dispositivos de su red (probablemente el TV box) está enviando tráfico anormal a internet, como si estuviera infectado. Le recomendamos desconectarlo y usar uno de marca certificada (Google TV, Fire TV, Apple TV). Si desea, le ayudamos a revisarlo.
 
 Si no responde: fija un plazo escrito (48 a 72 horas) y aplica una suspensión temporal solo si reincide.
 

@@ -243,7 +243,7 @@ class Analizador:
                     "DNS_BYPASS", "info",
                     "%s ignora el DNS del router" % src,
                     "%d de %d consultas van directo a resolvers públicos (%s). No es malo por sí solo "
-                    "(muchos aparatos lo hacen) pero conviene revisarlo."
+                    "(muchos dispositivos lo hacen) pero conviene revisarlo."
                     % (d["pub"], d["total"], ", ".join(sorted(d["resolvers"]))),
                     {"src": src, "public": d["pub"], "total": d["total"]}))
 

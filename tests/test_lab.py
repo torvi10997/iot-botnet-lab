@@ -385,7 +385,7 @@ class RouterTests(unittest.TestCase):
         self.addCleanup(self.d.cleanup)
 
     def pcap_dos_dispositivos(self):
-        """Un aparato infectado y otro sano, mezclados en una sola captura (como la de un router)."""
+        """Un dispositivo infectado y otro sano, mezclados en una sola captura (como la de un router)."""
         import emulador_pruebas as em
         from botnet_lab.pcapio import write_pcap
         frames = list(em.build(infected=True, duration=120))
@@ -413,7 +413,7 @@ class RouterTests(unittest.TestCase):
         from botnet_lab.app import App
         app = App(abrir=[self.pcap_dos_dispositivos()])
         lista = app.estado.lista()
-        self.assertEqual(lista["total"], 2)                      # el router no cuenta como aparato
+        self.assertEqual(lista["total"], 2)                      # el router no cuenta como dispositivo
         self.assertEqual(lista["sospechosos"], 1)
         self.assertEqual(lista["items"][0]["ip"], "192.168.137.50")   # el infectado va primero
         self.assertEqual(lista["items"][0]["semaforo"], "rojo")

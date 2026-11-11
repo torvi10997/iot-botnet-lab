@@ -1,4 +1,4 @@
-"""Modo visita: asistente para que un técnico revise un aparato en casa del cliente."""
+"""Modo visita: asistente para que un técnico revise un dispositivo en casa del cliente."""
 import datetime
 import os
 import re
@@ -20,9 +20,9 @@ PASOS ANTES DE EMPEZAR (en la laptop del técnico)
   1. Que la laptop tenga internet por CABLE (Ethernet).
   2. Windows: Configuración > Red e Internet > Zona con cobertura inalámbrica móvil.
      Banda 2,4 GHz, nombre y clave sencillos. Activarla.
-  3. Conectar el aparato (TV box, cámara...) a ese WiFi y comprobar que tiene IP.
-  4. Avisar al cliente: se observará SOLO el tráfico de ese aparato y la captura se borra al terminar.
-  5. Dejar el aparato encendido y EN USO (por ejemplo, reproduciendo video).
+  3. Conectar el dispositivo (TV box, cámara...) a ese WiFi y comprobar que tiene IP.
+  4. Avisar al cliente: se observará SOLO el tráfico de ese dispositivo y la captura se borra al terminar.
+  5. Dejar el dispositivo encendido y EN USO (por ejemplo, reproduciendo video).
 """
 
 
@@ -92,7 +92,7 @@ def capturar(tshark, interfaz, mac, minutos, carpeta):
                   (i + 1, total, (i + 1) * SEGMENTO_S, n))
             if n and any(x["code"] == "UDP_FLOOD" and x["severity"] == "alta"
                          for x in analyze(f, min_secs=3)["findings"]):
-                print("\n!! Se detectó un ataque en curso. Se detiene la captura: DESCONECTA el aparato "
+                print("\n!! Se detectó un ataque en curso. Se detiene la captura: DESCONECTA el dispositivo "
                       "de internet ahora.")
                 break
     except KeyboardInterrupt:
@@ -125,14 +125,14 @@ def ejecutar(args):
                 print("\nInterfaces disponibles:")
                 for i, (ident, desc) in enumerate(interfaces, 1):
                     print("  %2d. %s" % (i, desc))
-                n = _preguntar("Número de la interfaz donde está conectado el aparato")
+                n = _preguntar("Número de la interfaz donde está conectado el dispositivo")
                 if not n.isdigit() or not 1 <= int(n) <= len(interfaces):
                     print("Interfaz no válida.")
                     return 1
                 interfaz = interfaces[int(n) - 1][0]
         mac = args.mac
         if mac is None and not args.sin_preguntas:
-            mac = _preguntar("MAC del aparato (opcional, Enter para capturar todo)")
+            mac = _preguntar("MAC del dispositivo (opcional, Enter para capturar todo)")
         if mac and not MAC_RE.match(mac):
             print("La MAC debe verse así: aa:bb:cc:dd:ee:ff")
             return 1
