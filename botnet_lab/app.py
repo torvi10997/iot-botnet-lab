@@ -18,6 +18,16 @@ from . import escaneo, informe, requisitos, servicios, visita, vivo
 from .pcapio import read_packets
 
 WEB = Path(__file__).parent / "web"
+RUTA_LOG = os.path.join(tempfile.gettempdir(), "revisor_de_red.log")
+
+
+def _log(msg):
+    """Registro de eventos de la ventana (para diagnosticar si algo no abre o se cierra)."""
+    try:
+        with open(RUTA_LOG, "a", encoding="utf8") as f:
+            f.write("%s  %s\n" % (datetime.datetime.now().strftime("%H:%M:%S"), msg))
+    except OSError:
+        pass
 CARPETA_INFORMES = "informes"
 
 
@@ -36,7 +46,9 @@ class App:
         self.origen = None                    # datos de la captura abierta (si se está viendo un archivo)
         self._req = (0.0, None)               # (momento, diagnóstico en caché)
         self.archivo_captura = None
-        self.ultimo_ping = None
+        self.paginas = {}                     # id de página -> último aviso (momento)
+        self.hubo_paginas = False
+        self.ultimo_cierre = 0.0
         self.inicio = time.time()
         self.lock = threading.Lock()
         if abrir:
@@ -141,11 +153,38 @@ class App:
                 pass
             time.sleep(8)
 
+    def aviso_pagina(self, pid, cerrar=False, ahora=None):
+        """Una página (ventana o pestaña) avisa que sigue abierta, o que se está cerrando."""
+        ahora = ahora if ahora is not None else time.time()
+        if cerrar:
+            if self.paginas.pop(pid, None) is not None:
+                self.ultimo_cierre = ahora
+                _log("página cerrada: %s" % pid)
+        else:
+            if pid not in self.paginas:
+                _log("página conectada: %s" % pid)
+            self.paginas[pid] = ahora
+            self.hubo_paginas = True
+
+    def debe_salir(self, ahora=None):
+        """True cuando ya no queda ninguna ventana abierta. Tolera el frenado de pestañas ocultas:
+        sin avisos espera 90 s (10 min si hay una captura en curso) antes de darla por cerrada."""
+        ahora = ahora if ahora is not None else time.time()
+        en_vivo = bool(self.captura and self.captura.estado_txt == "capturando")
+        limite = 600 if en_vivo else 90
+        for pid, t in list(self.paginas.items()):
+            if ahora - t > limite:
+                del self.paginas[pid]
+                self.ultimo_cierre = ahora
+                _log("página sin avisos desde hace %d s: %s" % (limite, pid))
+        return self.hubo_paginas and not self.paginas and ahora - self.ultimo_cierre > 8
+
     def vigilar_ventana(self):
-        """Si la ventana se cierra (no hay pings), la aplicación termina y detiene la captura."""
+        """Termina la aplicación (y detiene la captura) cuando se cierra la última ventana."""
         while True:
-            time.sleep(3)
-            if self.ultimo_ping and time.time() - self.ultimo_ping > 20:
+            time.sleep(2)
+            if self.debe_salir():
+                _log("se cerró la última ventana: la aplicación termina")
                 self.salir()
 
     def salir(self):
@@ -288,7 +327,7 @@ def _manejador(app):
                 self._json({"glosario": servicios.GLOSARIO,
                             "categorias": {k: {"nombre": v[0], "descripcion": v[1]} for k, v in servicios.CATEGORIAS.items()}})
             elif u.path == "/api/ping":
-                app.ultimo_ping = time.time()
+                app.aviso_pagina(q.get("id", "?"))
                 self._json({"ok": True})
             else:
                 self._json({"error": "no existe"}, 404)
@@ -319,6 +358,10 @@ def _manejador(app):
             elif self.path == "/api/informe":
                 self._json(app.generar_informe(cuerpo.get("mac", ""), cuerpo.get("referencia", ""),
                                                cuerpo.get("tecnico", "")))
+            elif self.path.startswith("/api/ping"):
+                q = {k: v[0] for k, v in parse_qs(urlparse(self.path).query).items()}
+                app.aviso_pagina(q.get("id", "?"), cerrar=q.get("cerrar") == "1")
+                self._json({"ok": True})
             elif self.path == "/api/salir":
                 self._json({"ok": True})
                 threading.Thread(target=app.salir, daemon=True).start()
@@ -370,6 +413,41 @@ def _buscar_edge():
     return shutil.which("msedge") or shutil.which("chrome") or shutil.which("google-chrome")
 
 
+def _tamano_pantalla():
+    try:
+        import ctypes
+        u = ctypes.windll.user32
+        return u.GetSystemMetrics(0), u.GetSystemMetrics(1)
+    except Exception:
+        return 1366, 768
+
+
+def _abrir_ventana(app, url):
+    """Abre la app como ventana propia (Edge/Chrome). Si no se conecta en 12 s, la abre en el navegador."""
+    navegador = _buscar_edge()
+    proc = None
+    if navegador:
+        sw, sh = _tamano_pantalla()
+        ancho, alto = max(900, min(1320, int(sw * 0.94))), max(600, min(880, int(sh * 0.90)))
+        perfil = tempfile.mkdtemp(prefix="revisor_")
+        try:
+            proc = subprocess.Popen([navegador, "--app=" + url, "--window-size=%d,%d" % (ancho, alto),
+                                     "--user-data-dir=" + perfil, "--no-first-run", "--disable-extensions",
+                                     "--disable-background-timer-throttling", "--disable-renderer-backgrounding",
+                                     "--disable-backgrounding-occluded-windows"])
+            _log("ventana lanzada con %s (%dx%d)" % (os.path.basename(navegador), ancho, alto))
+        except OSError as e:
+            _log("no se pudo lanzar el navegador: %s" % e)
+    for _ in range(24):                       # hasta 12 s esperando que la ventana se conecte
+        if app.hubo_paginas:
+            return
+        time.sleep(0.5)
+    _log("la ventana no se conectó: se abre en el navegador")
+    print("\nNo pude abrir la ventana de la aplicación. La abro en tu navegador.")
+    print("Si no se abre, copia esta dirección en el navegador:  %s" % url)
+    webbrowser.open(url)
+
+
 def ejecutar(args):
     app = App(gateway=getattr(args, "gateway", None),
               interfaz=getattr(args, "interfaz", None), abrir=getattr(args, "abrir", None))
@@ -377,15 +455,13 @@ def ejecutar(args):
     url = "http://127.0.0.1:%d/" % srv.server_address[1]
     threading.Thread(target=app.refrescar_clientes, daemon=True).start()
     threading.Thread(target=app.vigilar_ventana, daemon=True).start()
-    print("Revisor de red en %s  (cierra la ventana para terminar)" % url)
+    print("Revisor de red en %s" % url)
+    print("Registro de eventos: %s" % RUTA_LOG)
+    _log("inicio en %s" % url)
     if not getattr(args, "sin_ventana", False):
-        navegador = _buscar_edge()
-        if navegador:
-            perfil = tempfile.mkdtemp(prefix="revisor_")
-            subprocess.Popen([navegador, "--app=" + url, "--window-size=1320,880",
-                              "--user-data-dir=" + perfil, "--no-first-run", "--disable-extensions"])
-        else:
-            webbrowser.open(url)
+        print("Abriendo la ventana... (si en unos segundos no aparece, se abrirá en tu navegador)")
+        print("Para terminar, cierra la ventana de la aplicación.")
+        threading.Thread(target=_abrir_ventana, args=(app, url), daemon=True).start()
     try:
         srv.serve_forever()
     except KeyboardInterrupt:

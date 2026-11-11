@@ -498,5 +498,91 @@ class RequisitosApiTests(unittest.TestCase):
             self.assertFalse(json.loads(urllib.request.urlopen(q, timeout=10).read())["ok"])   # acciones desconocidas se rechazan
 
 
+class VentanaTests(unittest.TestCase):
+    """La app termina al cerrarse la última ventana, pero tolera pestañas ocultas (el navegador las frena)."""
+
+    def app(self):
+        from botnet_lab.app import App
+        return App()
+
+    def test_nunca_se_cierra_si_nunca_hubo_ventana(self):
+        a = self.app()
+        self.assertFalse(a.debe_salir(ahora=10_000))
+
+    def test_cierre_explicito_termina_tras_una_breve_espera(self):
+        a = self.app()
+        a.aviso_pagina("p1", ahora=100)
+        self.assertFalse(a.debe_salir(ahora=105))
+        a.aviso_pagina("p1", cerrar=True, ahora=106)
+        self.assertFalse(a.debe_salir(ahora=110))      # 4 s después: aún espera (por si fue una recarga)
+        self.assertTrue(a.debe_salir(ahora=115))       # 9 s después: termina
+
+    def test_recargar_la_pagina_no_termina_la_app(self):
+        a = self.app()
+        a.aviso_pagina("p1", ahora=100)
+        a.aviso_pagina("p1", cerrar=True, ahora=101)    # pagehide al recargar
+        a.aviso_pagina("p2", ahora=103)                 # la página nueva se conecta enseguida
+        self.assertFalse(a.debe_salir(ahora=200 - 90))  # sigue viva
+
+    def test_dos_pestanas_cerrar_una_no_apaga_la_app(self):
+        a = self.app()
+        a.aviso_pagina("ventana", ahora=100)
+        a.aviso_pagina("pestana", ahora=100)
+        a.aviso_pagina("pestana", cerrar=True, ahora=120)
+        a.aviso_pagina("ventana", ahora=125)
+        self.assertFalse(a.debe_salir(ahora=130))
+
+    def test_pestana_oculta_se_tolera_90_segundos(self):
+        a = self.app()
+        a.aviso_pagina("p1", ahora=100)                 # luego el navegador la frena y deja de avisar
+        self.assertFalse(a.debe_salir(ahora=100 + 60))  # un minuto sin avisos: NO se cierra
+        self.assertFalse(a.debe_salir(ahora=100 + 89))
+        self.assertFalse(a.debe_salir(ahora=100 + 91))  # se da por perdida, pero espera 8 s de gracia
+        self.assertTrue(a.debe_salir(ahora=100 + 100))
+
+    def test_con_captura_en_curso_espera_mucho_mas(self):
+        from unittest import mock
+        a = self.app()
+        a.captura = mock.Mock(estado_txt="capturando")
+        a.aviso_pagina("p1", ahora=100)
+        self.assertFalse(a.debe_salir(ahora=100 + 300))     # 5 min sin avisos con captura: no se corta
+        self.assertFalse(a.debe_salir(ahora=100 + 590))
+        self.assertFalse(a.debe_salir(ahora=100 + 620))     # pasa de 10 min: se da por perdida, con 8 s de gracia
+        self.assertTrue(a.debe_salir(ahora=100 + 630))
+
+    def test_si_la_ventana_no_se_conecta_se_abre_el_navegador(self):
+        from unittest import mock
+        from botnet_lab import app as modulo
+        a = modulo.App()
+        with mock.patch.object(modulo, "_buscar_edge", return_value=None),              mock.patch.object(modulo.time, "sleep"),              mock.patch.object(modulo.webbrowser, "open") as abrir:
+            modulo._abrir_ventana(a, "http://127.0.0.1:1234/")
+        abrir.assert_called_once_with("http://127.0.0.1:1234/")
+
+    def test_si_la_ventana_se_conecta_no_se_abre_otro_navegador(self):
+        from unittest import mock
+        from botnet_lab import app as modulo
+        a = modulo.App()
+        a.aviso_pagina("v1")
+        with mock.patch.object(modulo, "_buscar_edge", return_value=None),              mock.patch.object(modulo.time, "sleep"),              mock.patch.object(modulo.webbrowser, "open") as abrir:
+            modulo._abrir_ventana(a, "http://127.0.0.1:1234/")
+        abrir.assert_not_called()
+
+    def test_ping_por_http_get_y_post(self):
+        import http.server
+        import threading
+        import urllib.request
+        from botnet_lab import app as modulo
+        a = modulo.App()
+        srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), modulo._manejador(a))
+        self.addCleanup(srv.server_close)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        self.addCleanup(srv.shutdown)
+        base = "http://127.0.0.1:%d" % srv.server_address[1]
+        urllib.request.urlopen(base + "/api/ping?id=abc", timeout=10).read()
+        self.assertIn("abc", a.paginas)
+        urllib.request.urlopen(urllib.request.Request(base + "/api/ping?id=abc&cerrar=1", b"", method="POST"), timeout=10).read()
+        self.assertNotIn("abc", a.paginas)             # sendBeacon al cerrar la ventana
+
+
 if __name__ == "__main__":
     unittest.main()

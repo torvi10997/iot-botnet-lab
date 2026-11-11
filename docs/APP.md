@@ -128,7 +128,8 @@ Para que un **verde** valga, la captura debe cubrir **10 minutos o más**; una c
 | "Falta Wireshark (TShark)" | No está instalado o sin la opción TShark | Instálalo desde wireshark.org y marca **TShark** |
 | El dispositivo no encuentra el WiFi | El hotspot está en 5 GHz | Conecta tu laptop a internet **por cable** y usa 2,4 GHz |
 | "No se pudo capturar" | Falta permiso o Npcap | Pulsa **Requisitos**; si indica permisos, abre con `Abrir_app_administrador.bat` |
-| No se abre la ventana | Python no está en el PATH, o Edge/Chrome no se pudo iniciar | Mira el mensaje que deja la consola abierta. Sin ventana, copia en tu navegador la dirección `http://127.0.0.1:...` que muestra |
+| No se abre la ventana | Edge/Chrome no pudo iniciar la ventana propia | No hace falta hacer nada: si la ventana no se conecta en 12 segundos, la app **abre sola tu navegador**. Si tampoco, copia en el navegador la dirección `http://127.0.0.1:...` que muestra la consola |
+| La app se cerró sola | Se cerró la última ventana o pestaña | Con una captura en curso espera hasta 10 minutos sin señal de la ventana (los navegadores frenan las pestañas ocultas). El archivo `revisor_de_red.log` (en la carpeta temporal de Windows: escribe `%TEMP%` en el Explorador) dice a qué hora y por qué terminó |
 | Aparece el dispositivo pero sin tráfico | Está inactivo | Ponlo en uso (un video) y pulsa **Iniciar captura** |
 | Todo sale "No concluyente" | Captura de menos de 10 minutos | Deja correr más tiempo |
 | "No se pudo abrir la captura" | El archivo no es un .pcap/.pcapng válido o no trae paquetes IPv4 | Verifica que se descargó completo; ábrelo antes en Wireshark |

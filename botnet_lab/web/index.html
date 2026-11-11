@@ -549,8 +549,12 @@ async function tickPaquetes() {
     if (r.filas.length) { filas = filas.concat(r.filas).slice(-600); ultimoPkt = r.ultimo; pintarPaquetes(); }
   } catch (e) {}
 }
-setInterval(tick, 1500); setInterval(tickPaquetes, 1000); setInterval(() => fetch("/api/ping").catch(() => {}), 3000);
-tick(); fetch("/api/ping"); chequearRequisitos();
+const PAGINA = Math.random().toString(36).slice(2, 10);
+const latido = () => fetch("/api/ping?id=" + PAGINA).catch(() => {});
+setInterval(tick, 1500); setInterval(tickPaquetes, 1000); setInterval(latido, 3000);
+// al cerrar la ventana, avisa a la aplicación para que termine sin esperar (navegadores frenan los latidos de pestañas ocultas)
+window.addEventListener("pagehide", () => navigator.sendBeacon("/api/ping?id=" + PAGINA + "&cerrar=1"));
+tick(); latido(); chequearRequisitos();
 if (location.hash === "#requisitos") abrirRequisitos(); else if (location.hash === "#abrir") abrirModalCaptura();
 </script>
 </body>
