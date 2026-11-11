@@ -29,6 +29,7 @@ Esta herramienta captura tráfico de red, ejecuta programas del sistema (`tshark
 | 9 | Baja | **Sin cabeceras de seguridad** | `Content-Security-Policy` (sin conexiones externas, sin incrustación, sin formularios), `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Cache-Control: no-store` | Pruebas automáticas |
 | 10 | Info | **Flujo de pruebas de GitHub** con permisos amplios y acciones por etiqueta | Permisos de solo lectura, acciones fijadas por huella (SHA), Dependabot mensual | Revisión |
 | 11 | Info | Las carpetas temporales de la ventana se acumulaban | Se borran al salir y las de más de un día, al iniciar | Revisión |
+| 12 | Baja | **Instalador de Wireshark con `shell=True`** (marcado por Bandit; el comando era una constante, no explotable) | Llamada directa con lista de argumentos, sin intérprete de comandos | Prueba automática |
 
 ## Lo que ya estaba bien (y se comprobó)
 
@@ -47,7 +48,7 @@ Esta herramienta captura tráfico de red, ejecuta programas del sistema (`tshark
 - **El dispositivo sospechoso queda en la misma red que tu laptop.** Si está infectado, puede intentar atacar al propio PC por la red del hotspot. Mantén activo el firewall de Windows, no compartas carpetas ni impresoras desde ese PC y usa el hotspot, no la red de la oficina.
 - **La captura (y los informes) contienen IP, MAC y nombres** que identifican a personas. La app los deja en tu PC; protégelos igual que cualquier dato personal.
 - **Un presupuesto de memoria agotado** hace que lo nuevo ya no se registre (la ventana lo avisa). Es una pérdida de detalle, no una caída.
-- **No está revisada por terceros.** Una prueba independiente (por ejemplo, con la herramienta de pentesting con IA [Strix](https://github.com/UseStrix/strix)) está planteada, pero no se ha ejecutado todavía.
+- **No está revisada por una persona o empresa ajena.** Como complemento, cada cambio pasa **Bandit** (análisis estático de Python: 0 hallazgos de severidad media o alta; los avisos bajos son por usar `subprocess` con listas de argumentos fijas) y **CodeQL** (análisis de seguridad de GitHub), y ambos se repiten cada semana. Una prueba de penetración independiente, por ejemplo con una herramienta de IA como [Strix](https://github.com/UseStrix/strix), se consideró pero no se ejecutó (tiene costo por uso del modelo de IA).
 
 ## Recomendaciones para quien la use
 

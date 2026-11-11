@@ -1,0 +1,50 @@
+name: seguridad
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "17 5 * * 1"   # cada lunes: detecta vulnerabilidades nuevas aunque el código no cambie
+
+# permisos mínimos; el trabajo de CodeQL pide solo lo que necesita
+permissions:
+  contents: read
+
+jobs:
+  bandit:
+    name: Bandit (análisis estático de Python)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7
+        with:
+          python-version: "3.12"
+      - run: python -m pip install "bandit==1.9.4"
+      # falla si hay hallazgos de severidad media o alta (los de severidad baja son informativos:
+      # uso de subprocess con listas de argumentos fijas y bloques try/except intencionales)
+      - run: bandit -r botnet_lab -ll
+
+  codeql:
+    name: CodeQL (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [python, javascript-typescript]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          persist-credentials: false
+      - uses: github/codeql-action/init@33d7b85da1a04171e211befe2c739303b9a4c066  # v4
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: none
+      - uses: github/codeql-action/analyze@33d7b85da1a04171e211befe2c739303b9a4c066  # v4
+        with:
+          category: "/language:${{ matrix.language }}"
