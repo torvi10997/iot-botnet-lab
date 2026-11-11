@@ -10,12 +10,14 @@ ETH_P_IP = 0x0800
 
 class Packet:
     __slots__ = ("ts", "src", "dst", "proto", "sport", "dport", "flags",
-                 "plen", "payload", "wire_len")
+                 "plen", "payload", "wire_len", "src_mac", "dst_mac")
 
-    def __init__(self, ts, src, dst, proto, sport, dport, flags, plen, payload, wire_len):
+    def __init__(self, ts, src, dst, proto, sport, dport, flags, plen, payload, wire_len,
+                 src_mac=None, dst_mac=None):
         self.ts, self.src, self.dst, self.proto = ts, src, dst, proto
         self.sport, self.dport, self.flags = sport, dport, flags
         self.plen, self.payload, self.wire_len = plen, payload, wire_len
+        self.src_mac, self.dst_mac = src_mac, dst_mac
 
 
 # ----------------------------------------------------------------- lectura
@@ -82,8 +84,14 @@ def _iter_pcapng(f):
             yield ((th << 32) | tl) / div, link, body[20:20 + cap], orig
 
 
+def mac_str(b):
+    return ":".join("%02x" % x for x in b) if b else None
+
+
 def _parse(ts, link, data, orig):
+    smac = dmac = None
     if link == 1:
+        smac, dmac = data[6:12], data[0:6]
         if len(data) < 14:
             return None
         et = struct.unpack("!H", data[12:14])[0]
@@ -114,13 +122,34 @@ def _parse(ts, link, data, orig):
     if proto == 17 and len(l4) >= 8:
         sport, dport = struct.unpack("!HH", l4[:4])
         return Packet(ts, src, dst, 17, sport, dport, 0,
-                      max(total - ihl - 8, 0), l4[8:], orig)
+                      max(total - ihl - 8, 0), l4[8:], orig, smac, dmac)
     if proto == 6 and len(l4) >= 20:
         sport, dport = struct.unpack("!HH", l4[:4])
         doff = (l4[12] >> 4) * 4
         return Packet(ts, src, dst, 6, sport, dport, l4[13],
-                      max(total - ihl - doff, 0), l4[doff:], orig)
-    return Packet(ts, src, dst, proto, 0, 0, 0, 0, b"", orig)
+                      max(total - ihl - doff, 0), l4[doff:], orig, smac, dmac)
+    return Packet(ts, src, dst, proto, 0, 0, 0, 0, b"", orig, smac, dmac)
+
+
+class _Tee:
+    """Envuelve un flujo: lo que se lee también se escribe en `salida` (para guardar la captura)."""
+
+    def __init__(self, f, salida=None):
+        self.f, self.salida = f, salida
+
+    def read(self, n):
+        b = self.f.read(n)
+        if self.salida is not None and b:
+            self.salida.write(b)
+        return b
+
+
+def read_stream(f, tee=None):
+    """Genera Packet de un flujo pcap en vivo (por ejemplo, la salida de `tshark -w -`)."""
+    for ts, link, data, orig in _iter_pcap(_Tee(f, tee)):
+        p = _parse(ts, link, data, orig)
+        if p is not None:
+            yield p
 
 
 def read_packets(path):

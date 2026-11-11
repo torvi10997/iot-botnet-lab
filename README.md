@@ -9,17 +9,14 @@ Nació de un caso real: un TV box genérico con ADB abierto recibía órdenes de
 ## Cómo se usa (resumen)
 
 1. Instala Python y Wireshark (abajo).
-2. Conecta el aparato sospechoso al hotspot de tu laptop Windows.
-3. **Doble clic en `revisar.bat`.** Captura unos 15 minutos y muestra un **semáforo** (rojo, amarillo, verde o no concluyente) con un informe en lenguaje simple.
+2. Conecta el aparato sospechoso al hotspot de tu laptop Windows y ponlo en uso (por ejemplo, un video).
+3. **Doble clic en `Abrir_app.bat`.** Se abre una ventana que muestra, **en vivo**, qué hace el aparato:
+   quién es (nombre, MAC, fabricante), con quién habla, a qué ritmo, qué tipo de tráfico produce (video, web,
+   mensajería, publicidad...) y un **semáforo** con el diagnóstico. Tiene botones de **Iniciar, Pausar, Continuar
+   y Detener**, y genera un informe en lenguaje simple para el cliente.
 
-## Qué incluye
-
-| Pieza | Para qué sirve |
-|---|---|
-| **`revisar.bat`** | Abre la aplicación con un doble clic (pide permisos de administrador y arranca el asistente). |
-| **Modo visita** (`visita`) | Asistente: captura el tráfico del aparato, avisa si ve un ataque en curso y entrega un informe con semáforo para el cliente. |
-| **Analizador** (`analyze`) | Lee una captura `.pcap`/`.pcapng` que ya tengas y marca los indicios, con explicación y veredicto. |
-| **Guías** (`docs/`) | Cómo capturar, guía del técnico, reglas de ejemplo para MikroTik y un plan de respuesta. |
+La aplicación está pensada también para **aprender**: cada tipo de tráfico y cada término se explica en palabras
+simples, y hay un glosario integrado. Solo observa el tráfico del aparato; no lee su contenido (casi todo va cifrado).
 
 ## Instalación
 
@@ -37,12 +34,18 @@ Comprueba la instalación con `python -m botnet_lab --help`: debe mostrar la lis
 
 ## Inicio rápido
 
-**Lo más fácil (Windows):** conecta el aparato al hotspot de tu laptop y haz doble clic en `revisar.bat`.
+**Lo más fácil (Windows):** conecta el aparato al hotspot de tu laptop y haz doble clic en `Abrir_app.bat`.
 
 **Con la terminal** (como administrador, dentro de la carpeta de la herramienta):
 
 ```bash
-# Revisar un aparato conectado a tu hotspot (captura 15 minutos y genera el informe)
+# Abrir la aplicación con ventana (captura en vivo)
+python -m botnet_lab app
+
+# Ver en la ventana una captura que ya tengas (por ejemplo, la de un router MikroTik)
+python -m botnet_lab app --abrir mi_captura.pcapng --gateway 192.168.88.1
+
+# Revisar un aparato conectado a tu hotspot en consola (captura 15 minutos y genera el informe)
 python -m botnet_lab visita --minutos 15
 
 # Analizar una captura real que ya tengas (pcap o pcapng)
@@ -55,6 +58,12 @@ python -m botnet_lab visita --desde-captura mi_captura.pcapng
 Para visitas en campo lee [`docs/VISITA.md`](docs/VISITA.md).
 
 El código de salida es `2` si el veredicto es *sospechoso*, útil para scripts.
+
+## Seguridad de la propia aplicación
+
+La ventana es una página local que solo escucha en `127.0.0.1` y rechaza peticiones con `Host` u `Origin` ajenos
+(protege contra DNS rebinding y contra otras webs abiertas en el navegador). Termina y detiene la captura al
+cerrar la ventana. No envía datos a ningún servidor.
 
 ## Qué detecta
 

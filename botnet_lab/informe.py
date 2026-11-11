@@ -81,6 +81,10 @@ def explicar(f):
         return ("Justo antes de atacar, el aparato recibió un mensaje de %d bytes de %s. Indica que un servidor "
                 "remoto le dio la orden." % (e["order_bytes"], e["controller"]))
     if c == "BEACON":
+        if e["dport"] in (80, 443, 8080, 8443):
+            return ("Mantiene un contacto regular (cada %.0f segundos) con %s, puerto %d. Es normal en apps que "
+                    "sincronizan o esperan notificaciones; solo importaría si el destino fuera desconocido y "
+                    "hubiera otras señales." % (e["interval_s"], e["dst"], e["dport"]))
         return ("Mantiene un contacto muy regular (cada %.0f segundos) con %s, puerto %d. Los equipos "
                 "controlados a distancia hacen esto para avisar que siguen activos." %
                 (e["interval_s"], e["dst"], e["dport"]))

@@ -108,7 +108,8 @@ class VisitaTests(unittest.TestCase):
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf):
             rc = main(["visita", "--desde-captura", pcap, "--salida", out, "--referencia", "Casa <X>"])
-        html = open(os.path.join(out, os.listdir(out)[0]), encoding="utf8").read()
+        with open(os.path.join(out, os.listdir(out)[0]), encoding="utf8") as fh:
+            html = fh.read()
         return rc, buf.getvalue(), html
 
     def test_rojo(self):
@@ -137,6 +138,100 @@ class VisitaTests(unittest.TestCase):
         from botnet_lab.informe import semaforo
         res = {"findings": [], "summary": {"local_hosts": {"192.168.1.5": 10}, "duration_s": 900}}
         self.assertEqual(semaforo(res), "sin_datos")
+
+
+class VivoTests(unittest.TestCase):
+    def setUp(self):
+        self.d = tempfile.TemporaryDirectory()
+        self.addCleanup(self.d.cleanup)
+        self.pcap = os.path.join(self.d.name, "v.pcap")
+        generate(self.pcap, infected=True, duration=120)
+
+    def estado(self):
+        from botnet_lab.vivo import Estado
+        e = Estado()
+        for p in read_packets(self.pcap):
+            e.procesar(p)
+        return e
+
+    def test_agrupa_por_dispositivo_y_diagnostica(self):
+        e = self.estado()
+        lista = e.lista()
+        self.assertEqual(len(lista), 1)
+        self.assertEqual(lista[0]["semaforo"], "rojo")
+        d = e.datos(lista[0]["mac"])
+        # los tres destinos principales son las tres víctimas de las inundaciones
+        self.assertEqual({x["ip"] for x in d["destinos"][:3]}, {"203.0.113.20", "203.0.113.30", "203.0.113.40"})
+        self.assertEqual(sum(x["pct"] for x in d["destinos"]) in range(98, 103), True)
+        self.assertTrue(any(c["clave"] == "juegos" for c in d["categorias"]))  # puerto 19132 = Minecraft
+
+    def test_la_lista_en_vivo_se_muestrea_en_inundaciones(self):
+        e = self.estado()
+        r = e.paquetes()
+        self.assertLessEqual(len(r["filas"]), 300)
+        self.assertGreater(r["omitidos"], 1000)
+
+    def test_dns_respuesta_aprende_nombres(self):
+        from botnet_lab.vivo import dns_respuesta
+        pregunta = b"\x07example\x03com\x00\x00\x01\x00\x01"
+        msg = (b"\x12\x34\x81\x80\x00\x01\x00\x01\x00\x00\x00\x00" + pregunta +
+               b"\xc0\x0c\x00\x01\x00\x01\x00\x00\x00\x3c\x00\x04\x5d\xb8\xd8\x22")
+        self.assertEqual(dns_respuesta(msg), ("example.com", ["93.184.216.34"]))
+        self.assertIsNone(dns_respuesta(b"\x12\x34\x01\x00" + b"\x00" * 8))  # una consulta, no respuesta
+
+    def test_servicios_en_lenguaje_simple(self):
+        from botnet_lab.servicios import describir
+        self.assertEqual(describir("UDP", 443, "rr1.googlevideo.com")[:2], ("video", "YouTube"))
+        self.assertEqual(describir("TCP", 5555)[0], "atencion")
+        self.assertEqual(describir("TCP", 9999)[0], "desconocido")
+
+    def test_api_http(self):
+        import http.server
+        import json
+        import threading
+        import urllib.error
+        import urllib.request
+        from botnet_lab.app import App, _manejador
+        app = App(abrir=[self.pcap])
+        app.abrir_informe = False
+        srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), _manejador(app))
+        self.addCleanup(srv.server_close)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        self.addCleanup(srv.shutdown)
+        base = "http://127.0.0.1:%d" % srv.server_address[1]
+
+        def get(ruta):
+            return urllib.request.urlopen(base + ruta, timeout=10).read()
+
+        self.assertIn(b"Revisor de red", get("/"))
+        # seguridad: se rechaza un Host ajeno (DNS rebinding) y un Origin de otra web
+        for cab in ({"Host": "evil.example:80"}, {"Origin": "http://evil.example"}):
+            try:
+                urllib.request.urlopen(urllib.request.Request(base + "/api/estado", headers=cab), timeout=10)
+                self.fail("debía rechazar " + str(cab))
+            except urllib.error.HTTPError as e:
+                self.assertEqual(e.code, 403)
+        try:
+            urllib.request.urlopen(urllib.request.Request(
+                base + "/api/control", b'{"accion":"detener"}', {"Origin": "http://evil.example"}), timeout=10)
+            self.fail("debía rechazar el POST")
+        except urllib.error.HTTPError as e:
+            self.assertEqual(e.code, 403)
+        est = json.loads(get("/api/estado"))
+        self.assertEqual(est["captura"]["estado"], "inactiva")
+        mac = est["dispositivos"][0]["mac"]
+        det = json.loads(get("/api/dispositivo?mac=" + mac.replace(":", "%3A")))
+        self.assertEqual(det["semaforo"]["color"], "rojo")
+        self.assertIn("glosario", json.loads(get("/api/glosario")))
+        cwd = os.getcwd()
+        os.chdir(self.d.name)
+        self.addCleanup(os.chdir, cwd)
+        req = urllib.request.Request(base + "/api/informe", json.dumps({"mac": mac, "referencia": "x<y"}).encode(),
+                                     {"Content-Type": "application/json"})
+        r = json.loads(urllib.request.urlopen(req, timeout=10).read())
+        self.assertTrue(r["ok"])
+        with open(r["ruta"], encoding="utf8") as fh:
+            self.assertIn("ROJO", fh.read())
 
 
 if __name__ == "__main__":

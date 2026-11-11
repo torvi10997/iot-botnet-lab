@@ -32,7 +32,17 @@ def main(argv=None):
     v.add_argument("--desde-captura", nargs="+", metavar="PCAP",
                    help="no capturar: generar el informe de capturas ya existentes")
 
+    g = sub.add_parser("app", help="abre la aplicación con ventana: captura en vivo con botones")
+    g.add_argument("--interfaz", help="interfaz de captura (por defecto, se detecta el hotspot de Windows)")
+    g.add_argument("--gateway", help="IP del router/hotspot que no se cuenta como aparato (192.168.137.1)")
+    g.add_argument("--abrir", nargs="+", metavar="PCAP", help="abre capturas existentes (.pcap/.pcapng) para verlas en la ventana")
+    g.add_argument("--puerto", type=int, default=0, help="puerto local (por defecto, uno libre)")
+    g.add_argument("--sin-ventana", action="store_true", help="solo inicia el servidor; abre la dirección en tu navegador")
+
     args = ap.parse_args(argv)
+    if args.cmd == "app":
+        from .app import ejecutar as app
+        return app(args)
     if args.cmd == "visita":
         return visita(args)
     res = analyze(args.captura, min_pps=args.min_pps, min_secs=args.min_secs,

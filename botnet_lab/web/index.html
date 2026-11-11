@@ -1,0 +1,414 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Revisor de red</title>
+<style>
+  :root {
+    --bg: #f6f5f1; --card: #ffffff; --soft: #efede7; --line: #dcdad3;
+    --ink: #0f0f0e; --ink2: #4d4c48; --ink3: #7a7872;
+    --rojo: #b3201f; --rojo-bg: #fbe9e8; --ambar: #8a5a00; --ambar-bg: #fdf3d8;
+    --verde: #1d6b3a; --verde-bg: #e6f4ea; --gris: #52514e; --gris-bg: #eceae4;
+    --sale: #c8620a; --entra: #2a78d6; --acento: #2a78d6;
+    --c1: #2a78d6; --c2: #e07b00; --c3: #2f9e60; --c4: #8e5bd0; --c5: #00a3a3; --c6: #b09a00; --c7: #d6458f; --c8: #5b6b8c; --c9: #a8672a; --cgris: #8d8b84;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #151514; --card: #1f1f1d; --soft: #272724; --line: #3a3934;
+      --ink: #f2f1ed; --ink2: #bcbab2; --ink3: #8d8b84;
+      --rojo: #ff8a87; --rojo-bg: #3a1b1a; --ambar: #f0c15a; --ambar-bg: #3a2e12;
+      --verde: #6fd18f; --verde-bg: #14301f; --gris: #bcbab2; --gris-bg: #2a2a27;
+      --sale: #f09a52; --entra: #6aa9f2; --acento: #6aa9f2;
+      --c1: #6aa9f2; --c2: #f0a04b; --c3: #59c389; --c4: #b68bec; --c5: #4ccfcf; --c6: #e0c34a; --c7: #ee7fb4; --c8: #93a3c4; --c9: #d19a64; --cgris: #8d8b84;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink);
+    font: 15px/1.45 "Segoe UI", system-ui, Arial, sans-serif; }
+  button { font: inherit; cursor: pointer; }
+  header { display: flex; align-items: center; gap: 14px; padding: 10px 18px; background: var(--card);
+    border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 5; flex-wrap: wrap; }
+  header h1 { font-size: 18px; margin: 0; letter-spacing: .01em; }
+  .pill { padding: 3px 12px; border-radius: 999px; font-size: 13px; font-weight: 600; border: 1.5px solid currentColor; }
+  .pill.on { color: var(--verde); } .pill.pausa { color: var(--ambar); } .pill.off { color: var(--gris); }
+  .grow { flex: 1; }
+  .btn { border: 1.5px solid var(--line); background: var(--card); color: var(--ink); padding: 7px 16px;
+    border-radius: 9px; font-weight: 600; }
+  .btn:hover { border-color: var(--acento); }
+  .btn.primario { background: var(--acento); border-color: var(--acento); color: #fff; }
+  .btn.peligro { border-color: var(--rojo); color: var(--rojo); }
+  .btn[disabled] { opacity: .45; cursor: not-allowed; }
+  #tiempo { font-variant-numeric: tabular-nums; color: var(--ink2); font-size: 14px; }
+
+  #aviso .banner { margin: 12px 18px 0; padding: 10px 14px; border-radius: 10px; background: var(--ambar-bg);
+    color: var(--ink); border: 1.5px solid var(--ambar); }
+  #aviso .banner.err { background: var(--rojo-bg); border-color: var(--rojo); }
+  #aviso select { margin-left: 8px; padding: 4px 8px; }
+
+  main { display: grid; grid-template-columns: 290px 1fr; gap: 16px; padding: 16px 18px 30px; align-items: start; }
+  aside { position: sticky; top: 64px; }
+  aside h2, section h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .07em; color: var(--ink2); margin: 0 0 8px; }
+  .dev { background: var(--card); border: 1.5px solid var(--line); border-radius: 12px; padding: 10px 12px; margin-bottom: 8px; cursor: pointer; }
+  .dev.sel { border-color: var(--acento); box-shadow: 0 0 0 2px color-mix(in srgb, var(--acento) 25%, transparent); }
+  .dev b { display: block; font-size: 15px; }
+  .dev small { display: block; color: var(--ink2); font-size: 12.5px; overflow-wrap: anywhere; }
+  .dot { display: inline-block; width: 11px; height: 11px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; background: var(--gris); }
+  .dot.rojo { background: var(--rojo); } .dot.amarillo { background: var(--ambar); } .dot.verde { background: var(--verde); }
+  .vacio { color: var(--ink2); background: var(--card); border: 1.5px dashed var(--line); border-radius: 12px; padding: 16px; }
+
+  .card { background: var(--card); border: 1.5px solid var(--line); border-radius: 14px; padding: 14px 16px; margin-bottom: 14px; }
+  .cab h2 { font-size: 22px; text-transform: none; letter-spacing: 0; color: var(--ink); margin: 0; }
+  .cab .meta { color: var(--ink2); font-size: 13.5px; margin-top: 2px; }
+  .badge { display: inline-block; font-size: 11.5px; padding: 1px 8px; border-radius: 999px; background: var(--soft); border: 1px solid var(--line); margin-left: 6px; cursor: help; }
+
+  .sem { display: flex; gap: 14px; align-items: flex-start; border-width: 2.5px; }
+  .sem .luz { flex: 0 0 46px; height: 46px; border-radius: 50%; margin-top: 2px; }
+  .sem.rojo { border-color: var(--rojo); background: var(--rojo-bg); } .sem.rojo .luz { background: var(--rojo); } .sem.rojo .et { color: var(--rojo); }
+  .sem.amarillo { border-color: var(--ambar); background: var(--ambar-bg); } .sem.amarillo .luz { background: var(--ambar); } .sem.amarillo .et { color: var(--ambar); }
+  .sem.verde { border-color: var(--verde); background: var(--verde-bg); } .sem.verde .luz { background: var(--verde); } .sem.verde .et { color: var(--verde); }
+  .sem.corto, .sem.sin_datos { border-color: var(--gris); background: var(--gris-bg); } .sem.corto .luz, .sem.sin_datos .luz { background: var(--gris); } .sem.corto .et, .sem.sin_datos .et { color: var(--gris); }
+  .sem .et { font-weight: 800; font-size: 20px; letter-spacing: .04em; }
+  .sem ul { margin: 6px 0 0; padding-left: 20px; }
+  .sem li { margin: 3px 0; }
+  .prog { margin-top: 10px; font-size: 13.5px; color: var(--ink2); }
+  .barra { height: 8px; border-radius: 4px; background: var(--soft); overflow: hidden; margin-top: 4px; }
+  .barra > i { display: block; height: 100%; background: var(--acento); border-radius: 4px; }
+  details { margin-top: 8px; } summary { cursor: pointer; font-weight: 600; }
+
+  .tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 14px; }
+  .tile { background: var(--card); border: 1.5px solid var(--line); border-radius: 12px; padding: 10px 14px; }
+  .tile .n { font-size: 30px; font-weight: 800; line-height: 1.1; font-variant-numeric: tabular-nums; }
+  .tile .n small { font-size: 14px; font-weight: 600; color: var(--ink2); margin-left: 3px; }
+  .tile .l { color: var(--ink2); font-size: 13px; }
+  .tile .b { font-size: 12.5px; margin-top: 2px; color: var(--ink2); }
+  .tile.sale .n { color: var(--sale); } .tile.entra .n { color: var(--entra); }
+
+  svg text { fill: var(--ink2); font-family: inherit; }
+  .leyenda { display: flex; gap: 18px; font-size: 13px; color: var(--ink2); margin: 4px 0 2px; }
+  .leyenda i { display: inline-block; width: 22px; height: 3px; border-radius: 2px; vertical-align: middle; margin-right: 6px; }
+
+  .cat { display: grid; grid-template-columns: 230px 1fr 52px; gap: 10px; align-items: center; margin: 6px 0; font-size: 14px; }
+  .cat .bar { height: 9px; border-radius: 5px; background: var(--soft); overflow: hidden; }
+  .cat .bar i { display: block; height: 100%; background: var(--acento); border-radius: 5px; }
+  .cat.atencion .bar i { background: var(--rojo); } .cat.desconocido .bar i { background: var(--ink3); }
+  .cat .p { text-align: right; font-variant-numeric: tabular-nums; color: var(--ink2); }
+  .cat small { display: block; color: var(--ink3); font-size: 12px; }
+  .frase { background: var(--soft); border-radius: 10px; padding: 8px 12px; margin-bottom: 8px; }
+
+  .tabs { display: flex; gap: 6px; margin-bottom: 10px; flex-wrap: wrap; }
+  .tabs button { border: 1.5px solid var(--line); background: var(--card); color: var(--ink); padding: 6px 14px; border-radius: 999px; font-weight: 600; }
+  .tabs button.act { background: var(--acento); border-color: var(--acento); color: #fff; }
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--ink2); font-size: 12px; text-transform: uppercase; letter-spacing: .05em; position: sticky; top: 0; background: var(--card); }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .mono { font-family: Consolas, "Cascadia Mono", monospace; font-size: 12.5px; }
+  tr.alerta td { background: var(--ambar-bg); }
+  tr.inactiva td { color: var(--ink3); }
+  .scroll { max-height: 420px; overflow: auto; border: 1px solid var(--line); border-radius: 10px; }
+  .nota { color: var(--ink2); font-size: 13px; margin: 6px 0; }
+  .glos { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 10px; }
+  .glos div { background: var(--soft); border-radius: 10px; padding: 8px 12px; }
+  .glos b { display: block; }
+  .fila2 { display: grid; grid-template-columns: 1.25fr 1fr; gap: 14px; margin-bottom: 14px; align-items: stretch; }
+  .fila3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 14px; align-items: stretch; }
+  .fila2 > .card, .fila3 > .card { margin-bottom: 0; }
+  .card h3 { font-size: 13px; text-transform: uppercase; letter-spacing: .07em; color: var(--ink2); margin: 0 0 8px; }
+  .pastel { display: flex; gap: 14px; align-items: center; }
+  .pastel.v { flex-direction: column; align-items: stretch; }
+  .pastel svg.dn { flex: 0 0 150px; width: 150px; height: 150px; align-self: center; }
+  .pastel svg.dn .t1 { font-size: 17px; font-weight: 800; fill: var(--ink); } .pastel svg.dn .t2 { font-size: 10px; fill: var(--ink2); }
+  .leg { flex: 1; min-width: 0; font-size: 13.5px; }
+  .leg div { display: grid; grid-template-columns: 12px 1fr auto; gap: 8px; align-items: baseline; padding: 3px 0; border-bottom: 1px solid var(--line); }
+  .leg div:last-child { border-bottom: 0; }
+  .leg i { width: 12px; height: 12px; border-radius: 3px; display: inline-block; align-self: center; }
+  .leg span.n { overflow-wrap: anywhere; } .leg small { color: var(--ink3); display: block; font-size: 12px; }
+  .leg b { font-variant-numeric: tabular-nums; }
+  @media (max-width: 1100px) { .fila2, .fila3 { grid-template-columns: 1fr; } }
+  #toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); background: var(--ink); color: var(--bg);
+    padding: 10px 18px; border-radius: 10px; display: none; max-width: 80vw; z-index: 20; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } aside { position: static; } .tiles { grid-template-columns: repeat(2, 1fr); } .cat { grid-template-columns: 1fr 1fr 48px; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Revisor de red</h1>
+  <span id="pill" class="pill off">Sin iniciar</span>
+  <span id="tiempo"></span>
+  <span class="grow"></span>
+  <span id="botones"></span>
+  <button class="btn" id="salir" title="Cierra la aplicación y detiene la captura">Salir</button>
+</header>
+<div id="aviso"></div>
+<main>
+  <aside>
+    <h2>Dispositivos conectados</h2>
+    <div id="lista"></div>
+  </aside>
+  <section id="detalle"></section>
+</main>
+<div id="toast"></div>
+
+<script>
+"use strict";
+const $ = (s) => document.querySelector(s);
+const esc = (t) => String(t == null ? "" : t).replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const fmt = (n) => Number(n).toLocaleString("es");
+const kb = (b) => b >= 1048576 ? (b / 1048576).toFixed(1) + " MB" : b >= 1024 ? (b / 1024).toFixed(0) + " KB" : b + " B";
+const mmss = (s) => { s = Math.max(0, Math.round(s)); return String(Math.floor(s / 60)).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0"); };
+
+let est = null, sel = null, tab = "conexiones", glos = null, ultimoPkt = 0, filas = [], congelada = false, interfazElegida = "";
+
+async function api(ruta, cuerpo) {
+  const r = await fetch(ruta, cuerpo ? {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(cuerpo)} : undefined);
+  return r.json();
+}
+function aviso(txt) { const t = $("#toast"); t.textContent = txt; t.style.display = "block"; clearTimeout(t._h); t._h = setTimeout(() => t.style.display = "none", 6000); }
+
+async function accion(a, extra) {
+  const r = await api("/api/control", Object.assign({accion: a}, extra || {}));
+  if (!r.ok) aviso(r.error || "No se pudo");
+  if (a === "nueva") { sel = null; filas = []; ultimoPkt = 0; }
+  tick();
+}
+$("#salir").onclick = async () => { await api("/api/salir", {}); document.body.innerHTML = "<p style='padding:30px'>Aplicación cerrada. Ya puedes cerrar esta ventana.</p>"; };
+
+async function informe() {
+  if (!sel) return;
+  const ref = prompt("Referencia de la visita o del cliente (opcional):", "") || "";
+  const r = await api("/api/informe", {mac: sel, referencia: ref});
+  aviso(r.ok ? "Informe guardado y abierto: " + r.ruta : (r.error || "No se pudo crear"));
+}
+
+// ---------------------------------------------------------------- cabecera y avisos
+function pintarCabecera() {
+  const c = est.captura, e = c.estado;
+  const pill = $("#pill");
+  pill.className = "pill " + (e === "capturando" ? "on" : e === "pausada" ? "pausa" : "off");
+  pill.textContent = e === "capturando" ? "Capturando" : e === "pausada" ? "En pausa" : (c.paquetes ? "Detenida" : "Sin iniciar");
+  $("#tiempo").textContent = c.paquetes || e !== "inactiva" ? "Tiempo observado " + mmss(c.activo_s) : "";
+  const hayDatos = c.paquetes > 0;
+  let b = "";
+  if (e === "capturando") b = `<button class="btn" onclick="accion('pausar')">Pausar</button> <button class="btn peligro" onclick="accion('detener')">Detener</button>`;
+  else if (e === "pausada") b = `<button class="btn primario" onclick="accion('continuar')">Continuar</button> <button class="btn peligro" onclick="accion('detener')">Detener</button>`;
+  else if (hayDatos) b = `<button class="btn" onclick="accion('nueva')">Nueva revisión</button> <button class="btn primario" onclick="informe()" ${sel ? "" : "disabled"}>Generar informe</button>`;
+  else b = `<button class="btn primario" onclick="iniciar()">Iniciar captura</button>`;
+  if ((e === "capturando" || e === "pausada") && sel) b += ` <button class="btn" onclick="informe()" title="Crea el informe con lo observado hasta ahora">Informe</button>`;
+  if ($("#botones").dataset.k !== b) { $("#botones").innerHTML = b; $("#botones").dataset.k = b; }
+}
+function iniciar() { accion("iniciar", {interfaz: interfazElegida || undefined}); }
+
+function pintarAviso() {
+  const r = est.requisitos, c = est.captura;
+  let h = "";
+  if (!r.tshark) h += `<div class="banner err"><b>Falta Wireshark (TShark).</b> Descárgalo de wireshark.org y marca <b>TShark</b> al instalar. Luego reabre esta aplicación.</div>`;
+  else if (!r.hotspot && c.estado === "inactiva") {
+    const opts = r.interfaces.map((i) => `<option value="${esc(i.id)}" ${i.id === interfazElegida ? "selected" : ""}>${esc(i.nombre)}</option>`).join("");
+    h += `<div class="banner"><b>No detecté el hotspot de Windows.</b> Actívalo en Configuración, Red e Internet, <i>Zona con cobertura inalámbrica móvil</i>, y conecta el aparato.
+      O elige a mano la interfaz: <select onchange="interfazElegida=this.value"><option value="">(elegir)</option>${opts}</select></div>`;
+  }
+  if (c.error) h += `<div class="banner err"><b>No se pudo capturar:</b> ${esc(c.error)}<br>Prueba abrir la aplicación como administrador.</div>`;
+  if ($("#aviso").dataset.k !== h) { $("#aviso").innerHTML = h; $("#aviso").dataset.k = h; }
+}
+
+// ---------------------------------------------------------------- lista de dispositivos
+function pintarLista() {
+  const d = est.dispositivos;
+  if (!sel || !d.some((x) => x.mac === sel)) { const p = d.find((x) => x.visto); sel = p ? p.mac : (d[0] ? d[0].mac : null); }
+  if (!d.length) { $("#lista").innerHTML = `<div class="vacio">Aún no hay aparatos.<br>Conecta tu aparato al WiFi del hotspot y pulsa <b>Iniciar captura</b>.</div>`; return; }
+  const sem = {rojo: "Rojo", amarillo: "Amarillo", verde: "Verde", corto: "Sin concluir", sin_datos: "Sin tráfico"};
+  $("#lista").innerHTML = d.map((x) => `
+    <div class="dev ${x.mac === sel ? "sel" : ""}" onclick="sel='${esc(x.mac)}';ultimoPkt=0;filas=[];tick()">
+      <b><span class="dot ${esc(x.semaforo || "")}"></span>${esc(x.nombre)}</b>
+      <small class="mono">${esc(x.mac)} · ${esc(x.ip)}</small>
+      <small>${esc(x.fabricante)}</small>
+      <small>${x.visto ? fmt(x.paquetes) + " paquetes · " + esc(sem[x.semaforo] || "") : "Conectado, aún sin tráfico"}</small>
+    </div>`).join("");
+}
+
+// ---------------------------------------------------------------- detalle
+function banda(pps) {
+  if (pps < 5) return ["En reposo", "Casi no habla. Es lo esperable cuando nadie usa el aparato."];
+  if (pps < 300) return ["Uso normal", "Navegar, mensajería o música generan este ritmo."];
+  if (pps < 1500) return ["Intenso", "Típico de ver video o descargar. Es normal si el destino responde."];
+  return ["Muy alto", "Solo es sospechoso si va casi todo a un mismo destino que NO responde."];
+}
+function grafica(serie) {
+  const W = 640, H = 330, L = 46, R = 8, T = 10, B = 24;
+  const max = Math.max(10, ...serie.map((s) => Math.max(s[1], s[2])));
+  const techo = Math.pow(10, Math.floor(Math.log10(max))) * Math.ceil(max / Math.pow(10, Math.floor(Math.log10(max))));
+  const x = (i) => L + (i / (serie.length - 1)) * (W - L - R), y = (v) => T + (1 - v / techo) * (H - T - B);
+  const ruta = (k) => serie.map((s, i) => (i ? "L" : "M") + x(i).toFixed(1) + " " + y(s[k]).toFixed(1)).join(" ");
+  let g = "";
+  for (let i = 0; i <= 4; i++) { const v = techo * i / 4, yy = y(v);
+    g += `<line x1="${L}" x2="${W - R}" y1="${yy}" y2="${yy}" stroke="var(--line)" stroke-width="1"/><text x="${L - 6}" y="${yy + 4}" font-size="11" text-anchor="end">${fmt(Math.round(v))}</text>`; }
+  [[0, "hace 2 min"], [60, "hace 1 min"], [119, "ahora"]].forEach(([i, t]) => g += `<text x="${x(i)}" y="${H - 6}" font-size="11" text-anchor="${i === 0 ? "start" : i === 119 ? "end" : "middle"}">${t}</text>`);
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Paquetes por segundo que salen y entran en los últimos 2 minutos">${g}
+    <path d="${ruta(2)}" fill="none" stroke="var(--entra)" stroke-width="2" stroke-linejoin="round"/>
+    <path d="${ruta(1)}" fill="none" stroke="var(--sale)" stroke-width="2" stroke-linejoin="round"/></svg>`;
+}
+function frasePrincipal(d) {
+  if (!d.categorias.length) return "Todavía no hay tráfico para describir.";
+  const c = d.categorias[0], s = c.servicios[0];
+  return `Casi todo lo que hace este aparato ahora es <b>${esc(c.nombre.toLowerCase())}</b> (${c.pct}% del tráfico)${s ? `, sobre todo <b>${esc(s)}</b>` : ""}.`;
+}
+
+// ---------------------------------------------------------------- gráficos de pastel (anillo)
+const COLOR_CAT = {video: "--c1", web: "--c2", mensajeria: "--c3", dns: "--c4", notificaciones: "--c5", sistema: "--c6",
+  juegos: "--c7", actualizaciones: "--c8", publicidad: "--c9", atencion: "--rojo", desconocido: "--cgris"};
+function donut(items, centro, sub) {
+  const R = 52, C = 2 * Math.PI * R, tot = items.reduce((a, i) => a + i.v, 0) || 1;
+  let off = 0, arcos = "";
+  items.forEach((i) => {
+    const len = C * i.v / tot, hueco = items.length > 1 ? 1.6 : 0;
+    if (len > 0) arcos += `<circle cx="70" cy="70" r="${R}" fill="none" style="stroke:var(${i.c})" stroke-width="22" stroke-dasharray="${Math.max(len - hueco, 0.1)} ${C - Math.max(len - hueco, 0.1)}" stroke-dashoffset="${-off}" transform="rotate(-90 70 70)"><title>${esc(i.l)}: ${i.p}%</title></circle>`;
+    off += len;
+  });
+  return `<svg class="dn" viewBox="0 0 140 140" role="img" aria-label="${esc(centro + " " + sub)}"><circle cx="70" cy="70" r="${R}" fill="none" stroke="var(--soft)" stroke-width="22"/>${arcos}
+    <text class="t1" x="70" y="72" text-anchor="middle">${esc(centro)}</text><text class="t2" x="70" y="87" text-anchor="middle">${esc(sub)}</text></svg>`;
+}
+function leyenda(items) {
+  return `<div class="leg">${items.map((i) => `<div title="${esc(i.t || "")}"><i style="background:var(${i.c})"></i><span class="n">${esc(i.l)}${i.x ? `<small>${esc(i.x)}</small>` : ""}</span><b>${i.p === 0 ? "<1" : i.p}%</b></div>`).join("")}</div>`;
+}
+function pastel(items, centro, sub, vertical) {
+  if (!items.length || !items.some((i) => i.v > 0)) return `<div class="nota">Todavía no hay datos.</div>`;
+  return `<div class="pastel ${vertical ? "v" : ""}">${donut(items, centro, sub)}${leyenda(items)}</div>`;
+}
+function pastelCategorias(d) {
+  const grandes = d.categorias.filter((c) => c.pct >= 1), chicas = d.categorias.filter((c) => c.pct < 1);
+  const it = grandes.map((c) => ({l: c.nombre, v: c.bytes, p: c.pct, c: COLOR_CAT[c.clave] || "--cgris", x: c.servicios.join(", "), t: c.descripcion}));
+  if (chicas.length) it.push({l: "Otros (menos del 1% cada uno)", v: chicas.reduce((a, c) => a + c.bytes, 0), p: 0, c: "--cgris",
+    x: chicas.map((c) => c.nombre).join(", "), t: "Tipos de tráfico con muy poco volumen."});
+  return pastel(it, d.categorias.length + "", d.categorias.length === 1 ? "tipo de tráfico" : "tipos de tráfico", false);
+}
+function pastelDestinos(d) {
+  const col = ["--c1", "--c2", "--c3", "--c4", "--c5"];
+  const it = d.destinos.map((x, i) => ({l: x.nombre, v: x.bytes, p: x.pct, c: x.ip ? col[i % 5] : "--cgris", x: x.servicio + (x.ip && x.nombre !== x.ip ? " · " + x.ip : "")}));
+  return pastel(it, d.destinos.length ? kb(d.totales.bo + d.totales.bi) : "", "en total", true);
+}
+function pastelProtocolos(d) {
+  const col = {TCP: "--c1", UDP: "--c2"};
+  const it = d.protocolos.filter((x) => x.pct >= 1).map((x) => ({l: x.nombre === "TCP" ? "TCP: confirma lo que llega" : x.nombre === "UDP" ? "UDP: rápido, sin confirmar" : x.nombre, v: x.bytes, p: x.pct, c: col[x.nombre] || "--cgris",
+    t: x.nombre === "UDP" ? "El video, las llamadas y los juegos usan mucho UDP. También los ataques de inundación." : "Páginas web, correo y mensajes usan TCP."}));
+  return pastel(it, "", "", true);
+}
+function notaProtocolos(d) {
+  const u = d.protocolos.find((x) => x.nombre === "UDP"), pu = u ? u.pct : 0;
+  const t = pu >= 50 ? "Aquí domina <b>UDP</b>. Es normal si el aparato ve video, hace llamadas o juega en línea (YouTube usa QUIC, que va sobre UDP). Lo que no es normal es UDP enviado a gran velocidad a un solo destino que nunca responde."
+    : "Aquí domina <b>TCP</b>, típico de navegación, mensajería y correo: cada paquete se confirma.";
+  return `<div class="frase" style="margin-top:12px">${t}</div>`;
+}
+function notaDireccion(d) {
+  const t = d.totales, sube = t.bo > t.bi * 2 && t.bo > 1048576;
+  const x = sube ? "<b>Ojo:</b> este aparato envía mucho más de lo que recibe. Eso es raro salvo que esté subiendo video o copias de seguridad; en un aparato infectado puede indicar un ataque de inundación."
+    : "Lo normal en un aparato doméstico es <b>bajar mucho más de lo que sube</b> (ver video, abrir páginas). Si sube mucho y casi no baja, conviene revisar a dónde envía.";
+  return `<div class="frase" style="margin-top:12px">${x}</div>`;
+}
+function pastelDireccion(d) {
+  const t = d.totales, tot = (t.bo + t.bi) || 1;
+  const it = [{l: "Baja (lo que recibe)", v: t.bi, p: Math.round(100 * t.bi / tot), c: "--entra", x: kb(t.bi), t: "Datos que llegan al aparato: video, páginas, descargas."},
+              {l: "Sube (lo que envía)", v: t.bo, p: Math.round(100 * t.bo / tot), c: "--sale", x: kb(t.bo), t: "Datos que salen del aparato. Un aparato que SOLO sube mucho y no recibe nada merece atención."}];
+  return pastel(it, "", "", true);
+}
+
+function pintarDetalle(d) {
+  const s = d.semaforo, r = d.ritmo, bd = banda(r.pps_sale);
+  const prog = (s.color === "verde" || s.color === "rojo") ? "" : `<div class="prog">Observado ${mmss(s.duracion_s)} de ${mmss(est.min_verde_s)} recomendados para poder dar un verde.
+      <div class="barra"><i style="width:${Math.min(100, 100 * s.duracion_s / est.min_verde_s)}%"></i></div></div>`;
+  const frases = s.frases.filter((f) => f.nivel !== "info").map((f) => `<li>${esc(f.texto)}</li>`).join("");
+  const notas = s.frases.filter((f) => f.nivel === "info").map((f) => `<li>${esc(f.texto)}</li>`).join("");
+  let h = `
+  <div class="card cab"><h2>${esc(d.nombre)}</h2>
+    <div class="meta"><span class="mono">${esc(d.mac)}</span>${d.mac_privada ? `<span class="badge" title="Esta MAC tiene el bit 'administrada localmente' activo: es una dirección privada que el teléfono cambia por cada red para que no lo rastreen. Es normal en teléfonos modernos.">MAC privada</span>` : ""}
+      · ${esc(d.ip)} · ${esc(d.fabricante)}</div></div>
+
+  <div class="card sem ${esc(s.color)}"><div class="luz" aria-hidden="true"></div><div style="flex:1">
+    <div class="et">${esc(s.etiqueta)}</div><div><b>${esc(s.titulo)}</b></div>
+    ${frases ? `<ul>${frases}</ul>` : ""}${notas ? `<ul style="color:var(--ink2)">${notas}</ul>` : ""}${prog}
+    <details><summary>Qué hacer</summary><ul>${s.acciones.map((a) => `<li>${esc(a)}</li>`).join("")}</ul></details></div></div>
+
+  <div class="tiles">
+    <div class="tile sale"><div class="n">${fmt(r.pps_sale)}<small>pps</small></div><div class="l">Paquetes que SALEN por segundo</div><div class="b" title="${esc(bd[1])}"><b>${bd[0]}</b>. ${esc(bd[1])}</div></div>
+    <div class="tile entra"><div class="n">${fmt(r.pps_entra)}<small>pps</small></div><div class="l">Paquetes que ENTRAN por segundo</div><div class="b">Lo que internet le responde o le envía.</div></div>
+    <div class="tile sale"><div class="n">${fmt(r.kbps_sale)}<small>kbps</small></div><div class="l">Velocidad de subida</div></div>
+    <div class="tile entra"><div class="n">${fmt(r.kbps_entra)}<small>kbps</small></div><div class="l">Velocidad de bajada</div></div>
+  </div>
+
+  <div class="fila2">
+    <div class="card"><h3>Ritmo en los últimos 2 minutos (paquetes por segundo)</h3>
+      <div class="leyenda"><span><i style="background:var(--sale)"></i>Sale del aparato</span><span><i style="background:var(--entra)"></i>Entra al aparato</span></div>
+      ${grafica(d.serie)}</div>
+    <div class="card"><h3>¿Qué está haciendo este aparato?</h3>
+      <div class="frase">${frasePrincipal(d)}</div>
+      ${pastelCategorias(d)}</div>
+  </div>
+  <div class="fila3">
+    <div class="card"><h3>Principales destinos (por volumen)</h3>${pastelDestinos(d)}</div>
+    <div class="card"><h3>Tipo de conexión</h3>${pastelProtocolos(d)}${notaProtocolos(d)}</div>
+    <div class="card"><h3>Subida y bajada</h3>${pastelDireccion(d)}${notaDireccion(d)}</div>
+  </div>
+
+  <div class="tabs">
+    ${[["conexiones", "Detalle de conexiones"], ["paquetes", "Paquetes en vivo"], ["glosario", "Glosario"]].map(([k, t]) => `<button class="${tab === k ? "act" : ""}" onclick="tab='${k}';tick()">${t}</button>`).join("")}</div>
+  <div class="card" id="tabcont">`;
+  if (tab === "conexiones") {
+    h += `<div class="nota">Cada fila es una conversación del aparato con un servidor. Si algo envía miles de paquetes por segundo y no recibe nada, es una señal de ataque.</div>
+    <div class="scroll"><table><tr><th>Destino</th><th>Qué es</th><th>Puerto</th><th class="num">Sale</th><th class="num">Entra</th><th class="num">pps</th></tr>
+    ${d.conexiones.map((c) => { const sr = c.pps > 300 && c.pi < c.po * 0.05;
+      return `<tr class="${sr ? "alerta" : ""}${!c.activa ? " inactiva" : ""}" title="${esc(c.explicacion)}">
+        <td>${esc(c.dominio || c.remoto)}${c.dominio ? `<br><span class="mono" style="color:var(--ink3)">${esc(c.remoto)}</span>` : ""}</td>
+        <td>${esc(c.servicio)}${sr ? `<br><b>Sin respuesta</b>` : ""}</td><td class="mono">${esc(c.proto)} ${c.puerto}</td>
+        <td class="num">${fmt(c.po)}<br><span style="color:var(--ink3)">${kb(c.bo)}</span></td>
+        <td class="num">${fmt(c.pi)}<br><span style="color:var(--ink3)">${kb(c.bi)}</span></td><td class="num">${fmt(c.pps)}</td></tr>`; }).join("")}
+    </table></div>`;
+  } else if (tab === "paquetes") {
+    h += `<div class="nota">Lista de los últimos paquetes, como en Wireshark. Con mucho tráfico se muestran como máximo 80 por segundo. <label><input type="checkbox" ${congelada ? "checked" : ""} onchange="congelada=this.checked"> Congelar lista</label></div>
+    <div class="scroll" id="pk"></div>`;
+  } else {
+    h += `<div class="glos">${(glos ? glos.glosario : []).map(([t, x]) => `<div><b>${esc(t)}</b>${esc(x)}</div>`).join("")}</div>`;
+  }
+  h += `</div>`;
+  const dest = $("#detalle");
+  // conserva lo que el usuario estaba haciendo: scroll de la página y de las tablas, y el "Qué hacer" abierto
+  const sc = window.scrollY, tb = dest.querySelector(".scroll"), tbTop = tb ? tb.scrollTop : 0;
+  const abierto = !!dest.querySelector("details[open]");
+  dest.innerHTML = h;
+  if (abierto) { const dt = dest.querySelector("details"); if (dt) dt.open = true; }
+  const tb2 = dest.querySelector(".scroll"); if (tb2) tb2.scrollTop = tbTop;
+  window.scrollTo(0, sc);
+  if (tab === "paquetes") pintarPaquetes();
+}
+
+function pintarPaquetes() {
+  const el = $("#pk"); if (!el) return;
+  el.innerHTML = `<table><tr><th>Hora</th><th>Dir.</th><th>Origen</th><th>Destino</th><th>Proto</th><th class="num">Bytes</th><th>Información</th></tr>` +
+    filas.slice().reverse().slice(0, 250).map((f) => {
+      const t = new Date(f[1] * 1000).toLocaleTimeString("es");
+      return `<tr><td class="mono">${t}</td><td>${f[3] === "sale" ? "sale" : "entra"}</td><td class="mono">${esc(f[4])}:${f[7]}</td><td class="mono">${esc(f[5])}:${f[8]}</td><td>${esc(f[6])}</td><td class="num">${f[9]}</td><td>${esc(f[10])}</td></tr>`; }).join("") + `</table>`;
+}
+
+// ---------------------------------------------------------------- ciclo
+async function tick() {
+  try {
+    est = await api("/api/estado");
+    pintarCabecera(); pintarAviso(); pintarLista();
+    if (!sel) { $("#detalle").innerHTML = `<div class="vacio"><b>Cómo empezar</b><ol><li>Activa el hotspot de Windows y conecta el aparato que quieres revisar.</li><li>Pon el aparato en uso (por ejemplo, reproduce un video).</li><li>Pulsa <b>Iniciar captura</b> y mira qué hace.</li></ol></div>`; return; }
+    const d = await api("/api/dispositivo?mac=" + encodeURIComponent(sel));
+    if (d.error) { $("#detalle").innerHTML = `<div class="vacio">Este aparato está conectado pero todavía no genera tráfico. Pulsa <b>Iniciar captura</b> y úsalo.</div>`; return; }
+    if (tab === "glosario" && !glos) glos = await api("/api/glosario");
+    pintarDetalle(d);
+  } catch (e) { /* servidor ocupado: se reintenta en el siguiente ciclo */ }
+}
+async function tickPaquetes() {
+  if (tab !== "paquetes" || !sel || congelada) return;
+  try {
+    const r = await api("/api/paquetes?mac=" + encodeURIComponent(sel) + "&desde=" + ultimoPkt);
+    if (r.filas.length) { filas = filas.concat(r.filas).slice(-600); ultimoPkt = r.ultimo; pintarPaquetes(); }
+  } catch (e) {}
+}
+setInterval(tick, 1500); setInterval(tickPaquetes, 1000); setInterval(() => fetch("/api/ping").catch(() => {}), 3000);
+tick(); fetch("/api/ping");
+</script>
+</body>
+</html>
