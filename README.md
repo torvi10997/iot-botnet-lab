@@ -14,11 +14,19 @@
 
 **Revisor de red** (repositorio `iot-botnet-lab`) es una aplicación gratuita para **técnicos, equipos de soporte de ISP pequeños y personas con un PC** que quieren saber qué hace realmente un TV box, una cámara o un teléfono cuando se conecta a internet, y si se comporta como un **bot de una botnet DDoS**.
 
-| Un dispositivo que se comporta como bot | Un dispositivo normal |
-|:---:|:---:|
-| ![Pantalla de la aplicación con un dispositivo en rojo: ráfagas de tráfico hacia tres servidores sin respuesta, órdenes de un servidor de control y gráficos de tipo de tráfico](docs/img/dispositivo-sospechoso.png) | ![Pantalla de la aplicación con un dispositivo en verde: tráfico de video por QUIC, bajada mucho mayor que la subida](docs/img/dispositivo-normal.png) |
+<p align="center">
+  <img src="docs/img/dispositivo-sospechoso.png" alt="Pantalla de la aplicación con un dispositivo en rojo: ráfagas de tráfico hacia tres servidores sin respuesta, órdenes de un servidor de control, gráficos del tipo de tráfico y los principales destinos" width="100%">
+</p>
 
-<sub>Capturas con datos de ejemplo: direcciones de documentación y una MAC inventada. No muestran ninguna red real.</sub>
+<sub>**Un dispositivo que se comporta como bot:** tres ráfagas de tráfico hacia tres servidores que no responden, precedidas por órdenes de un servidor de control. Capturas con datos de ejemplo (direcciones de documentación y una MAC inventada): no muestran ninguna red real.</sub>
+
+<details>
+<summary><b>Ver cómo se ve un dispositivo normal</b></summary>
+
+<img src="docs/img/dispositivo-normal.png" alt="Pantalla de la aplicación con un dispositivo en verde: video por QUIC, la bajada es mucho mayor que la subida" width="100%">
+
+**Un dispositivo normal:** baja mucho más de lo que sube (video por QUIC) y el destino responde. El semáforo está en verde porque se observó más de 10 minutos.
+</details>
 
 ---
 
@@ -38,9 +46,15 @@ Este proyecto nació de un caso real: un TV box con la depuración ADB abierta l
 - **Comprobar que todo está listo.** El botón **Requisitos** revisa Wireshark, Npcap, permisos y hotspot, y te guía para arreglar lo que falte.
 - **Aprender.** Cada tipo de tráfico y cada término se explica en palabras simples, con un glosario integrado.
 
-| Revisión de puertos | Informe para el cliente |
-|:---:|:---:|
-| ![Pestaña de puertos abiertos: Telnet y ADB sin clave de riesgo alto, con qué significa cada uno y qué hacer](docs/img/puertos-abiertos.png) | ![Informe en lenguaje simple con el semáforo en rojo, lo que se encontró y qué hacer](docs/img/informe-cliente.png) |
+**Revisión de puertos abiertos**, con qué significa cada uno y qué hacer:
+
+<img src="docs/img/puertos-abiertos.png" alt="Pestaña de puertos abiertos: Telnet y ADB sin clave de riesgo alto, con qué significa cada uno y qué hacer" width="100%">
+
+**Informe para el cliente**, en lenguaje simple y listo para imprimir:
+
+<p align="center">
+  <img src="docs/img/informe-cliente.png" alt="Informe en lenguaje simple con el semáforo en rojo, lo que se encontró y qué hacer" width="520">
+</p>
 
 ## Cómo funciona
 
