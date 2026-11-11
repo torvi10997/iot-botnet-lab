@@ -55,6 +55,14 @@ class LabTests(unittest.TestCase):
         self.assertEqual(beacon[0]["severity"], "alta")  # mismo servidor que dio las ordenes
         self.assertIn("DNS_RANDOM", codes(res))
 
+    def test_descarga_quic_no_es_inundacion(self):
+        """Regresión: YouTube por QUIC (UDP 443, el destino responde mucho) no debe marcarse."""
+        p = self.path("quic.pcap")
+        generate(p, infected=False, duration=700, quic=True)
+        res = analyze(p)
+        self.assertNotIn("UDP_FLOOD", codes(res))
+        self.assertEqual(res["verdict"], "sin indicios")
+
     def test_scan(self):
         p = self.path("scan.pcap")
         generate(p, infected=True, scan=True)

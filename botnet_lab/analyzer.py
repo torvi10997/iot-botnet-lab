@@ -154,6 +154,8 @@ def analyze(path, min_pps=200, min_secs=5, local_nets=None, device=None):
             replies = udp_in.get((src, dst), 0)
             ratio = replies / pk if pk else 0
             port = dports[(src, dst)].most_common(1)[0][0]
+            if ratio >= 0.3:  # el destino responde de forma sostenida: descarga, QUIC, videollamada...
+                continue
             sev = "alta" if ratio < 0.05 else "media"
             findings.append(Finding(
                 "UDP_FLOOD", sev,

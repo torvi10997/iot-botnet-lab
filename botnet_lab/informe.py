@@ -69,9 +69,14 @@ def explicar(f):
     """Frase en lenguaje simple para un hallazgo."""
     e, c = f["evidence"], f["code"]
     if c == "UDP_FLOOD":
-        return ("El aparato envió %d paquetes en unos %d segundos hacia el servidor externo %s, sin recibir "
-                "respuesta. Eso es lo que hace un equipo usado para atacar a otros." %
-                (e["packets"], e["seconds"], e["dst"]))
+        if e["reply_ratio"] < 0.05:
+            return ("El aparato envió %d paquetes en unos %d segundos hacia el servidor externo %s, sin recibir "
+                    "respuesta. Eso es lo que hace un equipo usado para atacar a otros." %
+                    (e["packets"], e["seconds"], e["dst"]))
+        return ("El aparato envió %d paquetes en unos %d segundos hacia el servidor externo %s y recibió muy "
+                "pocas respuestas (%d%% de lo enviado). Puede ser un ataque, pero también tráfico legítimo muy "
+                "intenso: conviene confirmarlo." %
+                (e["packets"], e["seconds"], e["dst"], round(e["reply_ratio"] * 100)))
     if c == "C2_ORDER":
         return ("Justo antes de atacar, el aparato recibió un mensaje de %d bytes de %s. Indica que un servidor "
                 "remoto le dio la orden." % (e["order_bytes"], e["controller"]))
@@ -102,6 +107,9 @@ def frases(findings):
         sev = max(g, key=lambda f: 0 if f["severity"] == "alta" else 1)["severity"]
         if len(g) == 1:
             out.append((sev, explicar(g[0])))
+        elif code == "UDP_FLOOD" and any(f["evidence"]["reply_ratio"] >= 0.05 for f in g):
+            out.append((sev, "El aparato lanzó %d ráfagas de tráfico UDP con pocas respuestas. Puede ser un ataque "
+                        "o tráfico legítimo muy intenso: conviene confirmarlo en el detalle técnico." % len(g)))
         elif code == "UDP_FLOOD":
             pk = sum(f["evidence"]["packets"] for f in g)
             dst = sorted({f["evidence"]["dst"] for f in g})

@@ -27,7 +27,7 @@ def _dns_query(name, txid):
 
 
 def build(infected=True, duration=120, flood_pps=600, flood_secs=15, dns_rate=25,
-          beacon_every=10, scan=False, seed=7):
+          beacon_every=10, scan=False, seed=7, quic=False):
     """Devuelve la lista de (timestamp, frame) del escenario."""
     rnd = random.Random(seed)
     blob = rnd.getrandbits(8 * 1500).to_bytes(1500, "big")
@@ -92,6 +92,14 @@ def build(infected=True, duration=120, flood_pps=600, flood_secs=15, dns_rate=25
             for k in range(300):
                 dst = "192.0.2.%d" % (1 + k % 250)
                 out(t0 + k / 30.0, dst, 6, tcp_segment(DEV_IP, dst, 41000 + k, 22, SYN, seq=k))
+    if quic:  # descarga de video por QUIC: mucho más entrante (1200 B) que saliente (ACK de 50 B)
+        qs = "198.51.100.200"
+        for start in (duration * 0.2, duration * 0.6):
+            for k in range(int(20 * 600)):
+                tq = start + k / 600.0
+                inn(tq, qs, 17, udp_segment(qs, DEV_IP, 443, 52000, blob[:1200]))
+                if k % 3 == 0:
+                    out(tq + 0.0005, qs, 17, udp_segment(DEV_IP, qs, 52000, 443, blob[:50]))
     return frames
 
 
