@@ -238,7 +238,7 @@ function pintarAviso() {
     h += `<div class="banner" style="background:var(--soft);border-color:var(--line)"><b>Estás viendo una captura abierta:</b> ${esc(o.archivos.join(", "))} (${fmt(o.paquetes)} paquetes).
       ${o.router_mac ? `Router ${o.automatico ? "detectado" : "indicado"}: ${esc(o.router_ip || "IP desconocida")} · <span class="mono">${esc(o.router_mac)}</span> (no se cuenta como dispositivo).` : `<b>No se pudo detectar el router</b>${o.router_ip ? "; se usó " + esc(o.router_ip) : ""}. Si ves al router como un dispositivo, vuelve a abrir la captura indicando su IP.`}</div>`;
   }
-  if (c.error) h += `<div class="banner err"><b>No se pudo capturar:</b> ${esc(c.error)}<br>Prueba abrir la aplicación como administrador.</div>`;
+  if (c.error) h += `<div class="banner err"><b>No se pudo capturar:</b> ${esc(c.error)}<br>Pulsa <b>Requisitos</b>; si indica permisos, abre la aplicación con <b>Abrir_app_administrador.bat</b>.</div>`;
   if ($("#aviso").dataset.k !== h) { $("#aviso").innerHTML = h; $("#aviso").dataset.k = h; }
 }
 

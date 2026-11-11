@@ -39,7 +39,7 @@ Funciona en Windows, Linux y macOS. El modo visita (captura con hotspot) está p
 | **Esta herramienta** | El código | En esta página pulsa el botón verde **Code**, luego **Download ZIP**, y descomprime. O con Git: `git clone https://github.com/torvi10997/iot-botnet-lab.git` |
 | **Wireshark con TShark y Npcap** | Solo para capturar tráfico real (`visita`) | [wireshark.org/download](https://www.wireshark.org/download.html). Deja marcado **TShark** y acepta instalar **Npcap**. |
 
-No hay que instalar nada más (no usa `pip`). Abre una terminal **dentro de la carpeta descomprimida** y ejecuta los comandos de abajo. Para capturar, abre la terminal **como administrador**.
+No hay que instalar nada más (no usa `pip`). Abre una terminal **dentro de la carpeta descomprimida** y ejecuta los comandos de abajo. En la mayoría de los equipos no hace falta ser administrador; si Npcap está limitado a administradores, la aplicación te lo avisa (botón **Requisitos**) y puedes usar `Abrir_app_administrador.bat`.
 
 Comprueba la instalación con `python -m botnet_lab --help`: debe mostrar la lista de comandos.
 
@@ -47,7 +47,7 @@ Comprueba la instalación con `python -m botnet_lab --help`: debe mostrar la lis
 
 **Lo más fácil (Windows):** conecta el dispositivo al hotspot de tu laptop y haz doble clic en `Abrir_app.bat`.
 
-**Con la terminal** (como administrador, dentro de la carpeta de la herramienta):
+**Con la terminal** (dentro de la carpeta de la herramienta):
 
 ```bash
 # Abrir la aplicación con ventana (captura en vivo)

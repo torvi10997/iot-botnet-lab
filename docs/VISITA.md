@@ -13,7 +13,7 @@ Para visitas donde se sospecha de un TV box, cámara u otro dispositivo (por eje
 
 - La laptop con **Windows**, WiFi y puerto **Ethernet** (o adaptador USB-Ethernet).
 - Un cable de red para llegar a internet.
-- Una terminal abierta **como administrador** (clic derecho, "Ejecutar como administrador"), dentro de la carpeta de la herramienta. Sin permisos no se puede capturar.
+- Una terminal abierta dentro de la carpeta de la herramienta. En la mayoría de los equipos no hace falta ser administrador; si la captura falla por permisos, abre la terminal **como administrador**.
 
 ## Antes de empezar: avisa al cliente
 
@@ -27,7 +27,7 @@ Si el cliente no está de acuerdo, no captures. Guarda un registro de que se le 
 2. **Activa el hotspot:** Configuración, Red e Internet, *Zona con cobertura inalámbrica móvil*. Banda **2,4 GHz**, nombre y clave sencillos.
 3. **Conecta el dispositivo** a ese WiFi y comprueba que recibió IP (normalmente `192.168.137.x`).
 4. **Pon el dispositivo en uso**: por ejemplo, abre una app de video. Los bots a veces atacan solo con el dispositivo activo.
-5. **Abre la aplicación.** Lo más fácil: **doble clic en `revisar.bat`** (pide permisos de administrador y arranca el asistente). O, en una terminal como administrador:
+5. **Abre la aplicación.** Lo más fácil: **doble clic en `revisar.bat`** (arranca el asistente de consola). O, en una terminal:
 
    ```
    python -m botnet_lab visita --minutos 15 --referencia "Casa de ..." --tecnico "Tu nombre"

@@ -112,7 +112,7 @@ def evaluar(d):
             r.append(_c("interfaces", "Interfaces de red", "error",
                         "TShark no ve ninguna interfaz de red (solo puertos USB o ninguna).",
                         "Suele ser Npcap sin instalar, instalado sin la opción de adaptadores, o falta de permisos. "
-                        "Reinstala Npcap y abre la aplicación como administrador."))
+                        "Reinstala Npcap y, si sigue igual, abre la aplicación con Abrir_app_administrador.bat."))
 
     # --- permisos
     if es_win:
@@ -120,7 +120,7 @@ def evaluar(d):
         if solo_admin and not admin:
             r.append(_c("permisos", "Permisos", "error",
                         "Npcap está configurado solo para administradores y esta aplicación no lo es.",
-                        "Abre la aplicación con Abrir_app.bat (pide permisos) o con clic derecho, Ejecutar como administrador."))
+                        "Abre la aplicación con Abrir_app_administrador.bat (pide permisos de administrador)."))
         elif admin:
             r.append(_c("permisos", "Permisos", "ok", "La aplicación se ejecuta como administrador."))
         else:

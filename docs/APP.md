@@ -34,7 +34,7 @@ La app **solo observa**. No ataca, no modifica el dispositivo y no envía datos 
 1. **Internet por cable.** Conecta la laptop a internet por Ethernet. Si sale por el mismo WiFi que va a compartir, Windows obliga al hotspot a usar 5 GHz y muchos dispositivos baratos solo ven 2,4 GHz.
 2. **Enciende el hotspot:** Configuración, Red e Internet, *Zona con cobertura inalámbrica móvil*. Banda 2,4 GHz, nombre y clave sencillos.
 3. **Conecta el dispositivo** a ese WiFi.
-4. **Abre la aplicación:** doble clic en `Abrir_app.bat` (pide permisos de administrador y abre la ventana).
+4. **Abre la aplicación:** doble clic en `Abrir_app.bat`. Abre la ventana sin pedir permisos especiales. Si el botón **Requisitos** avisa que Npcap está limitado a administradores, usa `Abrir_app_administrador.bat`.
 5. **Pulsa "Iniciar captura"** y pon el dispositivo **en uso** (por ejemplo, reproduce un video). Los bots a veces solo atacan con el dispositivo activo.
 6. **Mira la pantalla** (siguiente sección). Deja correr **10 minutos o más** para poder obtener un verde.
 7. **"Generar informe"** crea un documento en lenguaje simple (carpeta `informes`) para entregar al cliente.
@@ -78,7 +78,7 @@ El botón **Requisitos** (arriba a la derecha) revisa tu equipo y te dice qué f
 | Wireshark (TShark) | Que esté instalado el programa que copia los paquetes | Botón **Instalar Wireshark**: abre el instalador guiado con `winget`. Deja marcada la opción **TShark** |
 | Npcap | Que esté el controlador de captura (y que no haya un WinPcap antiguo en conflicto) | Botón **Abrir descarga de Npcap**. Instálalo con las opciones por defecto |
 | Interfaces de red | Que TShark vea adaptadores reales (no solo puertos USB) | Suele ser Npcap sin instalar o sin permisos |
-| Permisos | Si Npcap está limitado a administradores y la app no lo es | Abrir con `Abrir_app.bat` |
+| Permisos | Si Npcap está limitado a administradores y la app no lo es | Abrir con `Abrir_app_administrador.bat` |
 | Hotspot de Windows | Si está encendido, en qué banda y cuántos dispositivos hay conectados | Botón **Abrir configuración del hotspot** |
 | Internet del PC | Si tu PC sale a internet por WiFi: Windows fuerza entonces el hotspot a 5 GHz y muchos dispositivos baratos solo ven 2,4 GHz | Conecta el PC por cable de red |
 | Ventana | Si hay Edge o Chrome para abrir la app como ventana | Se abre en tu navegador |
@@ -127,7 +127,8 @@ Para que un **verde** valga, la captura debe cubrir **10 minutos o más**; una c
 | "No detecté el hotspot de Windows" | El hotspot está apagado | Actívalo en *Zona con cobertura inalámbrica móvil*, o elige la interfaz a mano en el aviso |
 | "Falta Wireshark (TShark)" | No está instalado o sin la opción TShark | Instálalo desde wireshark.org y marca **TShark** |
 | El dispositivo no encuentra el WiFi | El hotspot está en 5 GHz | Conecta tu laptop a internet **por cable** y usa 2,4 GHz |
-| "No se pudo capturar" | Falta permiso o Npcap | Abre con `Abrir_app.bat` (administrador) |
+| "No se pudo capturar" | Falta permiso o Npcap | Pulsa **Requisitos**; si indica permisos, abre con `Abrir_app_administrador.bat` |
+| No se abre la ventana | Python no está en el PATH, o Edge/Chrome no se pudo iniciar | Mira el mensaje que deja la consola abierta. Sin ventana, copia en tu navegador la dirección `http://127.0.0.1:...` que muestra |
 | Aparece el dispositivo pero sin tráfico | Está inactivo | Ponlo en uso (un video) y pulsa **Iniciar captura** |
 | Todo sale "No concluyente" | Captura de menos de 10 minutos | Deja correr más tiempo |
 | "No se pudo abrir la captura" | El archivo no es un .pcap/.pcapng válido o no trae paquetes IPv4 | Verifica que se descargó completo; ábrelo antes en Wireshark |
