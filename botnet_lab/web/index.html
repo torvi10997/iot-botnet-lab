@@ -126,6 +126,8 @@
   .leg span.n { overflow-wrap: anywhere; } .leg small { color: var(--ink3); display: block; font-size: 12px; }
   .leg b { font-variant-numeric: tabular-nums; }
   @media (max-width: 1100px) { .fila2, .fila3 { grid-template-columns: 1fr; } }
+  tr.r-alto td { background: var(--rojo-bg); } tr.r-medio td { background: var(--ambar-bg); }
+  .badge.b-alto { border-color: var(--rojo); color: var(--rojo); font-weight: 700; }
   #toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); background: var(--ink); color: var(--bg);
     padding: 10px 18px; border-radius: 10px; display: none; max-width: 80vw; z-index: 20; }
   @media (max-width: 900px) { main { grid-template-columns: 1fr; } aside { position: static; } .tiles { grid-template-columns: repeat(2, 1fr); } .cat { grid-template-columns: 1fr 1fr 48px; } }
@@ -158,7 +160,7 @@ const fmt = (n) => Number(n).toLocaleString("es");
 const kb = (b) => b >= 1048576 ? (b / 1048576).toFixed(1) + " MB" : b >= 1024 ? (b / 1024).toFixed(0) + " KB" : b + " B";
 const mmss = (s) => { s = Math.max(0, Math.round(s)); return String(Math.floor(s / 60)).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0"); };
 
-let est = null, sel = null, tab = "conexiones", glos = null, ultimoPkt = 0, filas = [], congelada = false, interfazElegida = "";
+let puertosDatos = {estado: "nunca"}, est = null, sel = null, tab = (["conexiones", "puertos", "paquetes", "glosario"].includes(location.hash.slice(1)) ? location.hash.slice(1) : "conexiones"), glos = null, ultimoPkt = 0, filas = [], congelada = false, interfazElegida = "";
 
 async function api(ruta, cuerpo) {
   const r = await fetch(ruta, cuerpo ? {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(cuerpo)} : undefined);
@@ -254,6 +256,46 @@ function frasePrincipal(d) {
   return `Casi todo lo que hace este aparato ahora es <b>${esc(c.nombre.toLowerCase())}</b> (${c.pct}% del tráfico)${s ? `, sobre todo <b>${esc(s)}</b>` : ""}.`;
 }
 
+// ---------------------------------------------------------------- puertos abiertos
+const RIESGO_CLASE = {alto: "r-alto", medio: "r-medio", bajo: "r-bajo", info: "r-info"};
+function insigniaPuertos() {
+  const p = puertosDatos;
+  if (p.estado !== "listo") return "";
+  const r = p.resumen;
+  const txt = r.abiertos === 0 ? "Sin puertos abiertos" : r.abiertos + " puerto" + (r.abiertos > 1 ? "s" : "") + " abierto" + (r.abiertos > 1 ? "s" : "") + (r.alto ? " · " + r.alto + " de riesgo alto" : "");
+  return `<span class="badge ${r.alto ? "b-alto" : ""}" title="Resultado de la revisión de puertos">${esc(txt)}</span>`;
+}
+function pestanaPuertos(d) {
+  const p = puertosDatos, corriendo = p.estado === "corriendo";
+  let h = `<div class="nota">Revisa a qué servicios de red responde este aparato (por ejemplo, depuración ADB o Telnet). Los aparatos infectados suelen tener alguno abierto.
+    <b>Úsalo solo en aparatos tuyos o con permiso de su dueño.</b> Se revisan puertos TCP; un puerto cerrado no garantiza seguridad.</div>
+    <div style="margin:8px 0">
+      <button class="btn primario" ${corriendo ? "disabled" : ""} onclick="escanear('rapido')">Revisión rápida (≈10 s)</button>
+      <button class="btn" ${corriendo ? "disabled" : ""} onclick="escanear('completo')" title="Puertos 1 a 10 000 y los más explotados">Revisión completa (1–2 min)</button>
+      ${corriendo ? `<button class="btn peligro" onclick="cancelarEscaneo()">Cancelar</button>` : ""}</div>`;
+  if (p.estado === "nunca") return h + `<div class="vacio">Todavía no se ha revisado este aparato.</div>`;
+  if (corriendo) h += `<div class="prog">Revisando ${esc(p.ip)}: ${fmt(p.hecho)} de ${fmt(p.total)} puertos.
+      <div class="barra"><i style="width:${p.total ? 100 * p.hecho / p.total : 0}%"></i></div></div>`;
+  if (p.estado === "error") return h + `<div class="banner err">No se pudo revisar: ${esc(p.error)}</div>`;
+  if (p.estado === "listo" || p.estado === "cancelado") {
+    const r = p.resumen;
+    h += `<div class="frase">${p.estado === "cancelado" ? "Revisión cancelada. " : ""}Se revisaron ${fmt(p.total)} puertos TCP de ${esc(p.ip)} en ${p.segundos} s:
+      <b>${r.abiertos}</b> abierto${r.abiertos === 1 ? "" : "s"}${r.abiertos ? ` (${r.alto} de riesgo alto, ${r.medio} medio, ${r.bajo} bajo)` : ""}.</div>`;
+    if (!p.resultados.length) h += `<div class="nota">No se encontró ningún puerto TCP abierto en la lista revisada. Es lo ideal para un aparato doméstico.</div>`;
+    else h += `<div class="scroll"><table><tr><th>Puerto</th><th>Servicio</th><th>Riesgo</th><th>Qué significa y qué hacer</th></tr>
+      ${p.resultados.map((x) => `<tr class="${RIESGO_CLASE[x.riesgo]}"><td class="num mono"><b>${x.puerto}</b></td><td>${esc(x.servicio)}${x.banner ? `<br><span class="mono" style="color:var(--ink3)">${esc(x.banner)}</span>` : ""}</td>
+        <td><b>${esc(x.etiqueta)}</b>${x.extra === "sin_clave" ? "<br>Sin clave" : x.extra === "pide_clave" ? "<br>Pide clave" : ""}</td>
+        <td>${esc(x.que_es)}<br><b>Qué hacer:</b> ${esc(x.que_hacer)}</td></tr>`).join("")}</table></div>`;
+  }
+  return h;
+}
+async function escanear(modo) {
+  const r = await api("/api/escaneo", {mac: sel, modo});
+  if (!r.ok) aviso(r.error || "No se pudo iniciar la revisión");
+  tick();
+}
+async function cancelarEscaneo() { await api("/api/escaneo", {mac: sel, accion: "cancelar"}); tick(); }
+
 // ---------------------------------------------------------------- gráficos de pastel (anillo)
 const COLOR_CAT = {video: "--c1", web: "--c2", mensajeria: "--c3", dns: "--c4", notificaciones: "--c5", sistema: "--c6",
   juegos: "--c7", actualizaciones: "--c8", publicidad: "--c9", atencion: "--rojo", desconocido: "--cgris"};
@@ -321,7 +363,7 @@ function pintarDetalle(d) {
   let h = `
   <div class="card cab"><h2>${esc(d.nombre)}</h2>
     <div class="meta"><span class="mono">${esc(d.mac)}</span>${d.mac_privada ? `<span class="badge" title="Esta MAC tiene el bit 'administrada localmente' activo: es una dirección privada que el teléfono cambia por cada red para que no lo rastreen. Es normal en teléfonos modernos.">MAC privada</span>` : ""}
-      · ${esc(d.ip)} · ${esc(d.fabricante)}</div></div>
+      · ${esc(d.ip)} · ${esc(d.fabricante)}${insigniaPuertos()}</div></div>
 
   <div class="card sem ${esc(s.color)}"><div class="luz" aria-hidden="true"></div><div style="flex:1">
     <div class="et">${esc(s.etiqueta)}</div><div><b>${esc(s.titulo)}</b></div>
@@ -350,7 +392,7 @@ function pintarDetalle(d) {
   </div>
 
   <div class="tabs">
-    ${[["conexiones", "Detalle de conexiones"], ["paquetes", "Paquetes en vivo"], ["glosario", "Glosario"]].map(([k, t]) => `<button class="${tab === k ? "act" : ""}" onclick="tab='${k}';tick()">${t}</button>`).join("")}</div>
+    ${[["conexiones", "Detalle de conexiones"], ["puertos", "Puertos abiertos"], ["paquetes", "Paquetes en vivo"], ["glosario", "Glosario"]].map(([k, t]) => `<button class="${tab === k ? "act" : ""}" onclick="tab='${k}';tick()">${t}</button>`).join("")}</div>
   <div class="card" id="tabcont">`;
   if (tab === "conexiones") {
     h += `<div class="nota">Cada fila es una conversación del aparato con un servidor. Si algo envía miles de paquetes por segundo y no recibe nada, es una señal de ataque.</div>
@@ -362,6 +404,8 @@ function pintarDetalle(d) {
         <td class="num">${fmt(c.po)}<br><span style="color:var(--ink3)">${kb(c.bo)}</span></td>
         <td class="num">${fmt(c.pi)}<br><span style="color:var(--ink3)">${kb(c.bi)}</span></td><td class="num">${fmt(c.pps)}</td></tr>`; }).join("")}
     </table></div>`;
+  } else if (tab === "puertos") {
+    h += pestanaPuertos(d);
   } else if (tab === "paquetes") {
     h += `<div class="nota">Lista de los últimos paquetes, como en Wireshark. Con mucho tráfico se muestran como máximo 80 por segundo. <label><input type="checkbox" ${congelada ? "checked" : ""} onchange="congelada=this.checked"> Congelar lista</label></div>
     <div class="scroll" id="pk"></div>`;
@@ -395,7 +439,14 @@ async function tick() {
     pintarCabecera(); pintarAviso(); pintarLista();
     if (!sel) { $("#detalle").innerHTML = `<div class="vacio"><b>Cómo empezar</b><ol><li>Activa el hotspot de Windows y conecta el aparato que quieres revisar.</li><li>Pon el aparato en uso (por ejemplo, reproduce un video).</li><li>Pulsa <b>Iniciar captura</b> y mira qué hace.</li></ol></div>`; return; }
     const d = await api("/api/dispositivo?mac=" + encodeURIComponent(sel));
-    if (d.error) { $("#detalle").innerHTML = `<div class="vacio">Este aparato está conectado pero todavía no genera tráfico. Pulsa <b>Iniciar captura</b> y úsalo.</div>`; return; }
+    puertosDatos = await api("/api/escaneo?mac=" + encodeURIComponent(sel));
+    if (d.error) {   // conectado pero sin tráfico todavía: se puede revisar sus puertos antes de capturar
+      const dev = est.dispositivos.find((x) => x.mac === sel) || {nombre: "Dispositivo", mac: sel, ip: "-", fabricante: ""};
+      $("#detalle").innerHTML = `<div class="card cab"><h2>${esc(dev.nombre)}</h2><div class="meta"><span class="mono">${esc(dev.mac)}</span> · ${esc(dev.ip)} · ${esc(dev.fabricante)}${insigniaPuertos()}</div></div>
+        <div class="vacio" style="margin-bottom:14px">Este aparato está conectado pero todavía no genera tráfico. Pulsa <b>Iniciar captura</b> y úsalo para ver su comportamiento. Mientras tanto, puedes revisar sus puertos abiertos:</div>
+        <div class="card"><h3>Puertos abiertos</h3>${pestanaPuertos(dev)}</div>`;
+      return;
+    }
     if (tab === "glosario" && !glos) glos = await api("/api/glosario");
     pintarDetalle(d);
   } catch (e) { /* servidor ocupado: se reintenta en el siguiente ciclo */ }

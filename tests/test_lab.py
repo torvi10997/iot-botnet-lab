@@ -234,5 +234,76 @@ class VivoTests(unittest.TestCase):
             self.assertIn("ROJO", fh.read())
 
 
+class EscaneoTests(unittest.TestCase):
+    """Prueba el escáner contra servidores falsos locales (nunca contra otros equipos)."""
+
+    @staticmethod
+    def servidor(respuesta=None):
+        import socket
+        import threading
+        srv = socket.socket()
+        srv.bind(("127.0.0.1", 0))
+        srv.listen(5)
+
+        def aceptar():
+            while True:
+                try:
+                    c, _ = srv.accept()
+                except OSError:
+                    return
+                try:
+                    if respuesta is not None:
+                        c.settimeout(1)
+                        c.recv(100)
+                        c.sendall(respuesta)
+                finally:
+                    c.close()
+
+        threading.Thread(target=aceptar, daemon=True).start()
+        return srv, srv.getsockname()[1]
+
+    def test_detecta_abierto_y_cerrado(self):
+        import socket
+        from botnet_lab.escaneo import escanear
+        srv, abierto = self.servidor()
+        self.addCleanup(srv.close)
+        libre = socket.socket()
+        libre.bind(("127.0.0.1", 0))
+        cerrado = libre.getsockname()[1]
+        libre.close()
+        res = escanear("127.0.0.1", [abierto, cerrado], timeout=0.5)
+        self.assertEqual([r["puerto"] for r in res], [abierto])
+        self.assertEqual(res[0]["servicio"], "Servicio sin identificar")
+
+    def test_adb_sin_clave_y_con_clave(self):
+        import struct
+        from botnet_lab.escaneo import sondear_adb
+        cabecera = lambda cmd: struct.pack("<6I", cmd, 0, 0, 0, 0, cmd ^ 0xFFFFFFFF)
+        s1, p1 = self.servidor(cabecera(0x4E584E43))     # CNXN: acepta sin pedir clave
+        s2, p2 = self.servidor(cabecera(0x48545541))     # AUTH: exige autorización
+        s3, p3 = self.servidor(b"hola")                  # no es ADB
+        for s in (s1, s2, s3):
+            self.addCleanup(s.close)
+        self.assertEqual(sondear_adb("127.0.0.1", p1), "sin_clave")
+        self.assertEqual(sondear_adb("127.0.0.1", p2), "pide_clave")
+        self.assertEqual(sondear_adb("127.0.0.1", p3), "desconocido")
+
+    def test_resumen_y_orden_por_riesgo(self):
+        from botnet_lab.escaneo import resumen
+        res = [{"riesgo": "bajo"}, {"riesgo": "alto"}, {"riesgo": "info"}]
+        r = resumen(res)
+        self.assertEqual((r["abiertos"], r["alto"], r["peor"]), (3, 1, "alto"))
+
+    def test_la_app_no_escanea_desconocidos_ni_la_puerta_de_enlace(self):
+        import tempfile as tf
+        from botnet_lab.app import App
+        with tf.TemporaryDirectory() as d:
+            pcap = os.path.join(d, "x.pcap")
+            generate(pcap, infected=False, duration=20)
+            app = App(abrir=[pcap])
+        self.assertFalse(app.lanzar_escaneo("aa:bb:cc:dd:ee:ff", "rapido")["ok"])   # MAC no vista
+        self.assertEqual(app.escaneos, {})
+
+
 if __name__ == "__main__":
     unittest.main()

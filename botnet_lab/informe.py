@@ -134,7 +134,7 @@ def _dur(s):
     return "%d min %02d s" % (m, sec)
 
 
-def render_html(res, ref="", tecnico="", fecha=None, capturado=True):
+def render_html(res, ref="", tecnico="", fecha=None, capturado=True, puertos=None):
     fecha = fecha or datetime.datetime.now().strftime("%d/%m/%Y %H:%M")
     esc = html.escape
     color = semaforo(res)
@@ -151,6 +151,19 @@ def render_html(res, ref="", tecnico="", fecha=None, capturado=True):
         (esc(f["severity"].upper()), esc(f["code"]), esc(f["title"] + ". " + f["detail"]))
         for f in res["findings"]) or '<tr><td colspan="3">Sin hallazgos.</td></tr>'
     hosts = ", ".join("%s (%d)" % kv for kv in s["local_hosts"].items()) or "-"
+    puertos_html = ""
+    if puertos and puertos.get("estado") == "listo":
+        rs = puertos["resultados"]
+        if rs:
+            filas = "".join("<tr><td>%d</td><td>%s</td><td>%s</td><td>%s %s</td></tr>" % (
+                p["puerto"], esc(p["servicio"]), esc(p["etiqueta"]), esc(p["que_es"]), esc("Qué hacer: " + p["que_hacer"]))
+                for p in rs)
+            cuerpo = ('<table><tr><th>Puerto</th><th>Servicio</th><th>Riesgo</th><th>Qué significa</th></tr>%s</table>' % filas)
+        else:
+            cuerpo = "<p>No se encontraron puertos TCP abiertos.</p>"
+        puertos_html = ("<h2>Puertos abiertos del aparato</h2><p class='meta'>Revisión de %d puertos TCP en %s "
+                        "(%d s).</p>%s<p class='lim'>Un puerto cerrado no garantiza seguridad: solo se revisó TCP.</p>"
+                        % (puertos["total"], esc(puertos["ip"]), puertos["segundos"], cuerpo))
     return """<!doctype html>
 <html lang="es"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -183,6 +196,7 @@ def render_html(res, ref="", tecnico="", fecha=None, capturado=True):
 <p class="lim"><b>Límites:</b> esta revisión no es un antivirus. Un aparato infectado puede permanecer callado
 durante la captura; por eso un resultado verde significa solo "no se vieron señales en este tiempo".</p>
 
+%(puertos_html)s
 <h2>Detalle técnico (para el técnico)</h2>
 <p class="meta">Equipos locales vistos: %(hosts)s</p>
 <table><tr><th>Nivel</th><th>Código</th><th>Descripción</th></tr>%(tec_rows)s</table>
@@ -194,7 +208,7 @@ durante la captura; por eso un resultado verde significa solo "no se vieron señ
         "nota": ("<p class='meta'>Notas:</p><ul>%s</ul>" % nota) if nota else "",
         "acc": acc, "dur": _dur(s["duration_s"]), "pk": s["packets"],
         "cap": "La captura se borró al terminar." if capturado else "",
-        "hosts": esc(hosts), "tec_rows": tec}
+        "hosts": esc(hosts), "tec_rows": tec, "puertos_html": puertos_html}
 
 
 def resumen_consola(res):

@@ -13,7 +13,7 @@ import webbrowser
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from . import informe, servicios, visita, vivo
+from . import escaneo, informe, servicios, visita, vivo
 from .pcapio import read_packets
 
 WEB = Path(__file__).parent / "web"
@@ -30,6 +30,7 @@ class App:
         self.sugerida = interfaz or (visita.interfaz_hotspot(self.interfaces) if self.tshark else None)
         self.guardar = False
         self.abrir_informe = True
+        self.escaneos = {}                    # MAC -> escaneo.Trabajo
         self.archivo_captura = None
         self.ultimo_ping = None
         self.inicio = time.time()
@@ -118,6 +119,21 @@ class App:
                 return {"ok": True}
         return {"ok": False, "error": "Acción no válida"}
 
+    def lanzar_escaneo(self, mac, modo):
+        """Revisa los puertos abiertos de un aparato YA detectado en la red local (nunca de una IP cualquiera)."""
+        modo = "completo" if modo == "completo" else "rapido"
+        d = next((x for x in self.estado.lista() if x["mac"] == mac), None)
+        ip = d["ip"] if d else None
+        if not ip or ip == "-":
+            return {"ok": False, "error": "Ese dispositivo todavía no tiene una dirección IP conocida."}
+        if not self.estado._loc.es_local(ip) or ip == self.estado.gw:
+            return {"ok": False, "error": "Solo se revisan aparatos de la red local."}
+        previo = self.escaneos.get(mac)
+        if previo and previo.estado == "corriendo":
+            return {"ok": True, "ya_en_curso": True}
+        self.escaneos[mac] = escaneo.Trabajo(ip, modo).iniciar()
+        return {"ok": True}
+
     def generar_informe(self, mac, referencia="", tecnico=""):
         res = self.estado.resultado(mac)
         if res is None:
@@ -126,7 +142,9 @@ class App:
         ruta = os.path.abspath(os.path.join(
             CARPETA_INFORMES, "informe_%s.html" % datetime.datetime.now().strftime("%Y%m%d_%H%M")))
         with open(ruta, "w", encoding="utf8") as f:
-            f.write(informe.render_html(res, ref=referencia, tecnico=tecnico, capturado=not self.guardar))
+            esc = self.escaneos.get(mac)
+            f.write(informe.render_html(res, ref=referencia, tecnico=tecnico, capturado=not self.guardar,
+                                        puertos=esc.datos() if esc and esc.estado == "listo" else None))
         if self.abrir_informe:
             try:
                 os.startfile(ruta) if os.name == "nt" else webbrowser.open("file://" + ruta)
@@ -178,6 +196,9 @@ def _manejador(app):
                 self._json(d if d else {"error": "sin datos"}, 200 if d else 404)
             elif u.path == "/api/paquetes":
                 self._json(app.estado.paquetes(int(q.get("desde", 0)), q.get("mac") or None))
+            elif u.path == "/api/escaneo":
+                t = app.escaneos.get(q.get("mac", ""))
+                self._json(t.datos() if t else {"estado": "nunca"})
             elif u.path == "/api/glosario":
                 self._json({"glosario": servicios.GLOSARIO,
                             "categorias": {k: {"nombre": v[0], "descripcion": v[1]} for k, v in servicios.CATEGORIAS.items()}})
@@ -198,6 +219,14 @@ def _manejador(app):
                 cuerpo = {}
             if self.path == "/api/control":
                 self._json(app.control(cuerpo))
+            elif self.path == "/api/escaneo":
+                if cuerpo.get("accion") == "cancelar":
+                    t = app.escaneos.get(cuerpo.get("mac", ""))
+                    if t:
+                        t.cancelar.set()
+                    self._json({"ok": True})
+                else:
+                    self._json(app.lanzar_escaneo(cuerpo.get("mac", ""), cuerpo.get("modo", "rapido")))
             elif self.path == "/api/informe":
                 self._json(app.generar_informe(cuerpo.get("mac", ""), cuerpo.get("referencia", ""),
                                                cuerpo.get("tecnico", "")))
