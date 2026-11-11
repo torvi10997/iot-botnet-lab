@@ -107,6 +107,10 @@ def explicar(f):
     if c == "SCAN":
         return ("Está probando puertos de muchas direcciones distintas, como buscando otros equipos "
                 "para infectar.")
+    if c == "LAN_SCAN":
+        return ("Está probando conexiones a %d equipos distintos de su propia red en pocos segundos (%d contestaron). "
+                "Así buscan los bots a otros dispositivos de la casa para infectarlos; también lo hace un programa "
+                "de escaneo de red legítimo, así que conviene confirmar si es el caso." % (e["hosts_per_10s"], e["responded"]))
     if c == "DNS_BYPASS":
         return "Ignora el DNS del router y usa servidores públicos. Por sí solo no es grave."
     return f["title"]
@@ -117,7 +121,7 @@ def frases(findings):
     out, por = [], {}
     for f in findings:
         por.setdefault(f["code"], []).append(f)
-    for code in ("UDP_FLOOD", "SYN_FLOOD", "ICMP_FLOOD", "C2_ORDER", "BEACON", "DNS_RANDOM", "SCAN", "DNS_BYPASS"):
+    for code in ("UDP_FLOOD", "SYN_FLOOD", "ICMP_FLOOD", "C2_ORDER", "BEACON", "DNS_RANDOM", "SCAN", "LAN_SCAN", "DNS_BYPASS"):
         g = por.get(code)
         if not g:
             continue

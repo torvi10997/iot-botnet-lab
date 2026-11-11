@@ -9,6 +9,7 @@ Detecta (por cada equipo de la red local):
   SCAN        barrido de muchos destinos/puertos con SYN
   SYN_FLOOD   inundación de aperturas de conexión (SYN) hacia un mismo servicio, casi sin SYN-ACK
   ICMP_FLOOD  inundación de ping (ICMP) hacia un mismo destino
+  LAN_SCAN    sondeo de muchos equipos de la MISMA red local (movimiento lateral: buscar otros dispositivos que infectar)
 """
 import ipaddress
 import math
@@ -38,6 +39,8 @@ MAX_ENTRADAS = 2000000   # presupuesto por defecto de un análisis suelto (archi
 # Umbrales de las inundaciones TCP (SYN) e ICMP, en paquetes por segundo hacia un mismo destino
 MIN_SYN_PPS = 100        # un cliente normal abre decenas de conexiones por segundo, no cientos hacia un solo servidor
 MIN_ICMP_PPS = 50        # un ping normal es 1 por segundo
+MIN_LAN_HOSTS = 20       # equipos locales distintos sondeados con SYN en 10 s (un dispositivo normal habla con unos pocos)
+MAX_RESPONDEN = 256      # equipos locales que contestaron a un sondeo, recordados por quien sondea
 
 
 class Presupuesto:
@@ -123,9 +126,10 @@ class Analizador:
     """Analiza paquetes uno a uno (feed) y puede dar el resultado en cualquier momento (resultado)."""
 
     def __init__(self, min_pps=200, min_secs=5, local_nets=None, device=None, presupuesto=None,
-                 min_syn_pps=MIN_SYN_PPS, min_icmp_pps=MIN_ICMP_PPS):
+                 min_syn_pps=MIN_SYN_PPS, min_icmp_pps=MIN_ICMP_PPS, min_lan_hosts=MIN_LAN_HOSTS):
         self.min_pps, self.min_secs, self.device = min_pps, min_secs, device
         self.min_syn_pps, self.min_icmp_pps = min_syn_pps, min_icmp_pps
+        self.min_lan_hosts = min_lan_hosts
         self.pres = presupuesto or Presupuesto(MAX_ENTRADAS)
         self.nets = [ipaddress.ip_network(n) for n in (local_nets or DEFAULT_LOCAL)]
         self._cache = {}
@@ -146,6 +150,8 @@ class Analizador:
         self.synack_in = Counter()                               # (local, remoto) -> SYN-ACK recibidos
         self.icmp_out = {}                                       # (src,dst) -> {segundo: [pings, bytes, primer_ts]}
         self.icmp_in = Counter()                                 # (local, remoto) -> respuestas de eco recibidas
+        self.lan = {}                                            # src -> {"w", "set": {dst locales}, "max", "ports": Counter, "total"}
+        self.lan_resp = {}                                       # src -> {equipos locales que contestaron SYN-ACK}
 
     def es_local(self, ip):
         r = self._cache.get(ip)
@@ -222,6 +228,13 @@ class Analizador:
                 if p.flags & 0x12 == 0x02:
                     self._syn(p)
                     self._syn_flood(p)
+            elif src_local and dst_local and p.src != p.dst:
+                if p.flags & 0x12 == 0x02:
+                    self._lan_syn(p)
+                elif p.flags & 0x12 == 0x12:                     # un equipo local contestó al sondeo: tiene ese puerto abierto
+                    r = self.lan_resp.get(p.dst)
+                    if r is not None and len(r) < MAX_RESPONDEN:
+                        r.add(p.src)
             elif dst_local and not src_local:
                 if p.flags & 0x12 == 0x12:                       # SYN-ACK: el destino SÍ acepta conexiones
                     k = (p.dst, p.src)
@@ -277,6 +290,24 @@ class Analizador:
             k = (p.dst, p.src)
             if k in self.icmp_in or (len(self.icmp_in) < MAX_UDP_IN and self.pres.pedir()):
                 self.icmp_in[k] += 1
+
+    def _lan_syn(self, p):
+        """SYN de un equipo local hacia otro equipo local: cuenta cuántos equipos distintos sondea en 10 s."""
+        r = self.lan.get(p.src)
+        if r is None:
+            if len(self.lan) >= MAX_HOSTS or not self.pres.pedir(60):
+                return
+            r = self.lan[p.src] = {"w": int(p.ts // 10), "set": set(), "max": 0, "ports": Counter(), "total": 0}
+            self.lan_resp[p.src] = set()
+        w = int(p.ts // 10)
+        if w != r["w"]:
+            r["max"] = max(r["max"], len(r["set"]))
+            r["w"], r["set"] = w, set()
+        if len(r["set"]) < MAX_VENTANA_SYN:
+            r["set"].add(p.dst)
+        r["total"] += 1
+        if p.dport in r["ports"] or len(r["ports"]) < 200:
+            r["ports"][p.dport] += 1
 
     def _syn(self, p):
         r = self.syn.get(p.src)
@@ -459,6 +490,23 @@ class Analizador:
                     "Hasta %d destinos/puertos distintos en 10 s con SYN. Puertos más usados: %s."
                     % (worst, ", ".join("%d (%d)" % x for x in ports)),
                     {"src": src, "distinct_per_10s": worst, "top_ports": ports}))
+
+        # ---- sondeo de la red local (movimiento lateral)
+        for src, r in self.lan.items():
+            if not want(src):
+                continue
+            worst = max(r["max"], len(r["set"]))
+            if worst >= self.min_lan_hosts:
+                ports = r["ports"].most_common(3)
+                resp = len(self.lan_resp.get(src, ()))
+                findings.append(Finding(
+                    "LAN_SCAN", "media",
+                    "Sondeo de la red local desde %s" % src,
+                    "Hasta %d equipos distintos de la red local en 10 s con SYN (puertos más usados: %s); %d contestaron. "
+                    "Así buscan los bots a otros dispositivos que infectar, pero también lo hacen los escáneres de red "
+                    "legítimos (Fing, monitoreo): confirme si el dispositivo debería hacerlo."
+                    % (worst, ", ".join("%d (%d)" % x for x in ports), resp),
+                    {"src": src, "hosts_per_10s": worst, "top_ports": ports, "responded": resp, "syn": r["total"]}))
 
         controllers = {f.evidence["controller"] for f in findings if f.code == "C2_ORDER"}
         for f in findings:

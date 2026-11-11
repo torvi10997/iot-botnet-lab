@@ -1022,6 +1022,113 @@ class InundacionesTests(unittest.TestCase):
         self.assertEqual(res["verdict"], "sin indicios")
 
 
+class SondeoLocalTests(unittest.TestCase):
+    """LAN_SCAN: un dispositivo que sondea muchos equipos de su propia red (movimiento lateral)."""
+
+    def setUp(self):
+        self.d = tempfile.TemporaryDirectory()
+        self.addCleanup(self.d.cleanup)
+
+    def analizar(self, **kw):
+        p = os.path.join(self.d.name, "x.pcap")
+        generate(p, **kw)
+        return analyze(p)
+
+    @staticmethod
+    def lan(res):
+        return [f for f in res["findings"] if f["code"] == "LAN_SCAN"]
+
+    @staticmethod
+    def pk(ts, src, dst, flags=0x02, dport=5555):
+        from botnet_lab.pcapio import Packet
+        return Packet(ts, src, dst, 6, 40000, dport, flags, 0, b"", 60,
+                      bytes.fromhex("0200000000aa"), bytes.fromhex("020000000001"))
+
+    def test_sondeo_de_la_red_local_se_detecta_con_puerto_y_respuestas(self):
+        res = self.analizar(infected=False, lan_scan=100, lan_open=3)
+        f = self.lan(res)
+        self.assertEqual(len(f), 1)
+        e = f[0]["evidence"]
+        self.assertGreaterEqual(e["hosts_per_10s"], 20)
+        self.assertEqual(e["top_ports"][0][0], 5555)
+        self.assertEqual(e["responded"], 3)
+        self.assertEqual(f[0]["severity"], "media")          # puede ser un escáner legítimo: se pide revisar, no se acusa
+        self.assertEqual(res["verdict"], "revisar")
+
+    def test_el_sondeo_local_no_se_confunde_con_el_barrido_a_internet(self):
+        res = self.analizar(infected=False, lan_scan=100)
+        self.assertEqual([f for f in res["findings"] if f["code"] == "SCAN"], [])
+
+    def test_hablar_con_pocos_equipos_locales_no_es_sondeo(self):
+        a = Analizador()
+        for i in range(2000):                                  # mucho tráfico, pero solo con 10 equipos conocidos
+            a.feed(self.pk(1e9 + i / 100.0, "192.168.137.50", "192.168.137.%d" % (60 + i % 10)))
+        self.assertEqual(self.lan(a.resultado()), [])
+
+    def test_justo_bajo_el_umbral_no_se_marca_y_en_el_umbral_si(self):
+        for n, esperado in ((19, 0), (20, 1)):
+            a = Analizador()
+            for i in range(n):
+                a.feed(self.pk(1e9 + i * 0.1, "192.168.137.50", "192.168.137.%d" % (100 + i)))
+            self.assertEqual(len(self.lan(a.resultado())), esperado, n)
+
+    def test_el_sondeo_lento_repartido_en_el_tiempo_no_cuenta(self):
+        a = Analizador()
+        for i in range(60):                                    # un equipo nuevo cada 30 s: nunca 20 en 10 s
+            a.feed(self.pk(1e9 + i * 30.0, "192.168.137.50", "192.168.137.%d" % (100 + i)))
+        self.assertEqual(self.lan(a.resultado()), [])
+
+    def test_el_trafico_local_normal_y_el_de_internet_no_activan_nada(self):
+        res = self.analizar(infected=False, duration=700, quic=True)
+        self.assertEqual(self.lan(res), [])
+        self.assertEqual(res["verdict"], "sin indicios")
+
+    def test_un_syn_hacia_si_mismo_o_de_internet_hacia_la_red_no_cuenta(self):
+        a = Analizador()
+        for i in range(50):
+            a.feed(self.pk(1e9 + i * 0.1, "203.0.113.9", "192.168.137.%d" % (100 + i)))  # de internet hacia dentro
+        self.assertEqual(self.lan(a.resultado()), [])
+        a = Analizador()
+        for i in range(19):                                    # 19 vecinos + él mismo = 20 "destinos", pero solo 19 equipos ajenos
+            a.feed(self.pk(1e9 + i * 0.1, "192.168.137.50", "192.168.137.%d" % (100 + i)))
+        a.feed(self.pk(1e9 + 2.0, "192.168.137.50", "192.168.137.50"))
+        self.assertEqual(self.lan(a.resultado()), [])
+
+    def test_con_dispositivo_elegido_solo_se_juzga_ese(self):
+        a = Analizador(device="192.168.137.77")
+        for i in range(60):
+            a.feed(self.pk(1e9 + i * 0.1, "192.168.137.50", "192.168.137.%d" % (100 + i)))
+        self.assertEqual(self.lan(a.resultado()), [])
+
+    def test_tope_de_memoria_del_sondeo(self):
+        from unittest import mock
+        from botnet_lab import analyzer as an
+        with mock.patch.object(an, "MAX_HOSTS", 30):
+            a = an.Analizador()
+            for i in range(300):
+                a.feed(self.pk(1e9 + i, "192.168.%d.%d" % (i // 250, 1 + i % 250), "192.168.137.200"))
+            self.assertLessEqual(len(a.lan), 30)
+        a = an.Analizador()
+        for i in range(2000):                                  # miles de destinos: la ventana queda acotada
+            a.feed(self.pk(1e9 + i * 0.001, "192.168.137.50", "10.%d.%d.1" % (i // 250, i % 250)))
+        self.assertLessEqual(len(a.lan["192.168.137.50"]["set"]), an.MAX_VENTANA_SYN)
+
+    def test_el_informe_lo_explica_en_lenguaje_simple(self):
+        from botnet_lab.informe import frases
+        txt = " ".join(t for _, t in frases(self.analizar(infected=False, lan_scan=100, lan_open=2)["findings"]))
+        self.assertIn("de su propia red", txt)
+        self.assertIn("2 contestaron", txt)
+
+    def test_la_vista_en_vivo_lo_pone_amarillo(self):
+        from botnet_lab.vivo import Estado
+        p = os.path.join(self.d.name, "v.pcap")
+        generate(p, infected=False, lan_scan=100)
+        e = Estado()
+        for pk in read_packets(p):
+            e.procesar(pk)
+        self.assertEqual(e.lista()["items"][0]["semaforo"], "amarillo")
+
+
 class mock_path:
     """Cambia el PATH un momento."""
 

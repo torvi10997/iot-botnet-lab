@@ -16,7 +16,7 @@ El **Revisor de red** es una ventana de Windows que muestra, en vivo, qué hace 
 1. **Tu laptop hace de punto de acceso** (el hotspot de Windows). El dispositivo se conecta a él, así que *todo* su tráfico pasa por tu laptop. Por eso sirve con cualquier dispositivo, sin tocar el router del cliente.
 2. **`tshark`** (parte de Wireshark) copia los paquetes que pasan. La app los lee al instante.
 3. La app **agrupa el tráfico por dispositivo** (usando su MAC), lo clasifica en lenguaje simple (video, web, mensajería, publicidad...) y aprende los nombres de los servidores a partir de las consultas DNS.
-4. Un **analizador** busca los indicios de un dispositivo usado como bot: inundaciones UDP, SYN (TCP) e ICMP (ping) sin respuesta, órdenes de un servidor de control, latidos regulares, consultas DNS con nombres sin sentido, barridos de puertos.
+4. Un **analizador** busca los indicios de un dispositivo usado como bot: inundaciones UDP, SYN (TCP) e ICMP (ping) sin respuesta, órdenes de un servidor de control, latidos regulares, consultas DNS con nombres sin sentido, barridos de puertos y sondeos de la red local (movimiento lateral).
 5. Todo se resume en un **semáforo** y, si quieres, en un **informe** para el cliente.
 
 La app **solo observa**. No ataca, no modifica el dispositivo y no envía datos a ningún servidor. Casi todo el tráfico va cifrado, así que ve *quién habla con quién, cuándo y cuánto*, pero **no el contenido** de los mensajes.

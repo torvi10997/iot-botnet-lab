@@ -65,7 +65,7 @@ Este proyecto nació de un caso real: un TV box con la depuración ADB abierta l
 
 1. **Tu laptop actúa como punto de acceso** (el hotspot de Windows). El dispositivo se conecta a él, así que todo su tráfico pasa por tu equipo, sin tocar el router del cliente.
 2. **TShark** copia los paquetes y la aplicación los lee al instante, los agrupa por dispositivo y aprende los nombres de los servidores a partir de las consultas DNS.
-3. Un **analizador** busca las huellas de un bot: inundaciones UDP, SYN (TCP) e ICMP (ping) sin respuesta, órdenes de un servidor de control, latidos regulares, consultas DNS sin sentido y barridos de puertos.
+3. Un **analizador** busca las huellas de un bot: inundaciones UDP, SYN (TCP) e ICMP (ping) sin respuesta, órdenes de un servidor de control, latidos regulares, consultas DNS sin sentido, barridos de puertos y sondeos de la red local (buscar otros dispositivos que infectar).
 4. Todo se resume en el **semáforo** y, si quieres, en un **informe**.
 
 La aplicación **solo observa**: no ataca, no modifica el dispositivo y no envía los datos capturados a ningún servidor. Como casi todo el tráfico va cifrado, ve *quién habla con quién, cuándo y cuánto*, pero **no el contenido** de los mensajes.
@@ -115,6 +115,7 @@ El código de salida es `2` si el veredicto es *sospechoso*, útil para scripts.
 | `DNS_RANDOM` | Consultas DNS con etiquetas largas y aleatorias (incluso binarias) directo a resolvers públicos | Sondeo de dominios del malware |
 | `DNS_BYPASS` | El dispositivo ignora el DNS del router | Informativo; muchos dispositivos lo hacen |
 | `SCAN` | Muchos destinos y puertos distintos con SYN en pocos segundos | Búsqueda de nuevas víctimas |
+| `LAN_SCAN` | SYN hacia **20 o más equipos distintos de la misma red local** en 10 s (anota los puertos y cuántos contestaron) | Movimiento lateral: un bot busca otros dispositivos de la casa (cámaras, TV, celulares) para infectarlos. Es amarillo, no rojo, porque un escáner de red legítimo (Fing, monitoreo) se ve igual |
 
 Lo fuerte es la **combinación**: un latido por sí solo suele ser un falso positivo (notificaciones, apps), pero latido + orden + inundación casi nunca lo es. Ejemplo de resultado (direcciones de documentación):
 
@@ -157,7 +158,7 @@ Los umbrales se ajustan con `--min-pps`, `--min-secs` y `--local-net`.
 
 - **No es un antivirus ni un sistema de detección de intrusos.** Un *verde* significa «no se vieron señales en este tiempo», no «está limpio»: un dispositivo infectado puede estar callado un buen rato. Por eso la herramienta nunca da verde con menos de 10 minutos de captura.
 - **Un solo caso real de calibración** (un TV box genérico infectado y un teléfono sano). Con otros dispositivos pueden aparecer falsos positivos o pasar algo por alto. Si lo pruebas, abre un *issue* con tus resultados anonimizados.
-- Solo **IPv4** (TCP, UDP e ICMP). No detecta inundaciones ACK/RST ni de aplicación sobre HTTPS, ni escaneos hacia la red local, ni minería de criptomonedas. Un dispositivo hecho para evadir (tráfico muy bajo y lento) puede no ser detectado.
+- Solo **IPv4** (TCP, UDP e ICMP). No detecta inundaciones ACK/RST ni de aplicación sobre HTTPS, ni minería de criptomonedas. Un dispositivo hecho para evadir (tráfico muy bajo y lento) puede no ser detectado.
 - La captura en vivo con hotspot es para **Windows**; el análisis de capturas funciona en cualquier sistema con Python.
 - **Captura únicamente redes y dispositivos propios o con autorización expresa** de su dueño, y avísale antes. No publiques capturas ni informes reales sin quitar IP, MAC y datos personales.
 
@@ -180,7 +181,7 @@ Las pruebas usan un generador de tráfico sintético interno (`tests/emulador_pr
 <details>
 <summary><b>English summary</b></summary>
 
-**Revisor de red** (`iot-botnet-lab`) is a free, dependency-free Python tool (UI in Spanish) that shows **live** what a device on your network is doing and whether it behaves like an **IoT botnet bot** (typically a cheap generic Android TV box). A Windows laptop acts as a hotspot, `tshark` copies the packets, and the app groups them per device, explains them in plain language, flags unanswered UDP and SYN floods, ICMP (ping) floods, command-and-control orders and beacons, random DNS, and port scans, and gives a traffic-light verdict plus a customer-ready report. It also checks a device's open ports (e.g. ADB without authentication) and can open router captures (`.pcap`/`.pcapng`) with hundreds of devices, suspicious ones first.
+**Revisor de red** (`iot-botnet-lab`) is a free, dependency-free Python tool (UI in Spanish) that shows **live** what a device on your network is doing and whether it behaves like an **IoT botnet bot** (typically a cheap generic Android TV box). A Windows laptop acts as a hotspot, `tshark` copies the packets, and the app groups them per device, explains them in plain language, flags unanswered UDP and SYN floods, ICMP (ping) floods, command-and-control orders and beacons, random DNS, port scans and sweeps of the local network (lateral movement), and gives a traffic-light verdict plus a customer-ready report. It also checks a device's open ports (e.g. ADB without authentication) and can open router captures (`.pcap`/`.pcapng`) with hundreds of devices, suspicious ones first.
 
 It only observes: it does not attack, and captured data never leaves your machine. It is **not an antivirus**, was calibrated on a single real case, and has not been audited by third parties (see `docs/SEGURIDAD.md`). Use it only on networks and devices you own or are authorized to test.
 

@@ -37,7 +37,7 @@ def _dns_query(name, txid):
 
 def build(infected=True, duration=120, flood_pps=600, flood_secs=15, dns_rate=25,
           beacon_every=10, scan=False, seed=7, quic=False, syn_flood=False, icmp_flood=False,
-          flood_replies=False, icmp_pps=None):
+          flood_replies=False, icmp_pps=None, lan_scan=0, lan_port=5555, lan_open=0):
     """Devuelve la lista de (timestamp, frame) del escenario."""
     rnd = random.Random(seed)
     blob = rnd.getrandbits(8 * 1500).to_bytes(1500, "big")
@@ -133,6 +133,15 @@ def build(infected=True, duration=120, flood_pps=600, flood_secs=15, dns_rate=25
             out(tf, ICMP_TARGET, 1, icmp_segment(8, blob[:56], seq=k))
             if flood_replies:
                 inn(tf + 0.001, ICMP_TARGET, 1, icmp_segment(0, blob[:56], seq=k))
+    if lan_scan:                                  # sondeo de la red local: SYN al mismo puerto de `lan_scan` equipos vecinos
+        base = DEV_IP.rsplit(".", 1)[0]
+        t0 = duration * 0.4
+        for k in range(lan_scan):
+            ip = "%s.%d" % (base, 100 + k)
+            tt = t0 + k / 20.0
+            out(tt, ip, 6, tcp_segment(DEV_IP, ip, 42000 + k, lan_port, SYN, seq=k))
+            if k < lan_open:                          # algunos equipos tienen el puerto abierto y contestan
+                inn(tt + 0.002, ip, 6, tcp_segment(ip, DEV_IP, lan_port, 42000 + k, SYN_ACK, seq=k))
     return frames
 
 
