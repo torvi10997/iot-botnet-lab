@@ -1,137 +1,179 @@
-# iot-botnet-lab
+<div align="center">
 
-Herramienta para revisar, **en tiempo real y con un dispositivo real**, si un dispositivo IoT (TV box Android genérico, cámara, etc.) se comporta como un **bot de una botnet DDoS**, dentro de una red doméstica o de un ISP pequeño.
+# Revisor de red
 
-Nació de un caso real: un TV box genérico con ADB abierto recibía órdenes de un servidor de control y lanzaba inundaciones UDP a terceros desde la IP pública del operador. Aquí queda empaquetado lo aprendido para que otros puedan revisar sus propias redes.
+### Ve en vivo qué hace un dispositivo conectado a tu red y descubre si está infectado
 
-> **Solo biblioteca estándar de Python 3.8+**: no usa `pip`. Para capturar tráfico se necesita Wireshark/TShark: ver [Instalación](#instalación).
+[![Pruebas](https://github.com/torvi10997/iot-botnet-lab/actions/workflows/test.yml/badge.svg)](https://github.com/torvi10997/iot-botnet-lab/actions/workflows/test.yml)
+[![Seguridad](https://github.com/torvi10997/iot-botnet-lab/actions/workflows/seguridad.yml/badge.svg)](https://github.com/torvi10997/iot-botnet-lab/actions/workflows/seguridad.yml)
+![Python 3.8+](https://img.shields.io/badge/python-3.8%2B-3776AB)
+![Sin dependencias](https://img.shields.io/badge/dependencias-ninguna-2ea44f)
+![Licencia MIT](https://img.shields.io/badge/licencia-MIT-blue)
 
-## Cómo se usa (resumen)
+</div>
 
-1. Instala Python y Wireshark (abajo).
-2. Conecta el dispositivo sospechoso al hotspot de tu laptop Windows y ponlo en uso (por ejemplo, un video).
-3. **Doble clic en `Abrir_app.bat`.** Se abre una ventana que muestra, **en vivo**, qué hace el dispositivo:
-   quién es (nombre, MAC, fabricante), con quién habla, a qué ritmo, qué tipo de tráfico produce (video, web,
-   mensajería, publicidad...) y un **semáforo** con el diagnóstico. Tiene botones de **Iniciar, Pausar, Continuar
-   y Detener**, y genera un informe en lenguaje simple para el cliente.
+**Revisor de red** (repositorio `iot-botnet-lab`) es una aplicación gratuita para **técnicos, equipos de soporte de ISP pequeños y personas con un PC** que quieren saber qué hace realmente un TV box, una cámara o un teléfono cuando se conecta a internet, y si se comporta como un **bot de una botnet DDoS**.
 
-4. El botón **Requisitos** comprueba que Wireshark, Npcap, los permisos y el hotspot estén bien, y te guía para arreglarlo.
-5. El botón **Abrir captura…** carga una captura hecha en el **router** (por ejemplo con el sniffer de MikroTik) y muestra
-   **muchos dispositivos a la vez, con los sospechosos primero**.
-6. En la pestaña **Puertos abiertos**, revisa a qué servicios responde el dispositivo (ADB, Telnet, paneles web...).
-   Distingue un ADB **abierto sin clave** (la puerta de entrada de BADBOX y Kimwolf) de uno que pide autorización,
-   explica cada puerto y qué hacer, y el resultado se incluye en el informe. Revisión rápida en unos segundos;
-   completa (puertos 1 a 10 000) en 1 a 2 minutos. Solo revisa dispositivos ya detectados en tu red local, solo TCP
-   (un puerto cerrado no garantiza seguridad), y debe usarse **únicamente en dispositivos propios o con permiso**.
+| Un dispositivo que se comporta como bot | Un dispositivo normal |
+|:---:|:---:|
+| ![Pantalla de la aplicación con un dispositivo en rojo: ráfagas de tráfico hacia tres servidores sin respuesta, órdenes de un servidor de control y gráficos de tipo de tráfico](docs/img/dispositivo-sospechoso.png) | ![Pantalla de la aplicación con un dispositivo en verde: tráfico de video por QUIC, bajada mucho mayor que la subida](docs/img/dispositivo-normal.png) |
 
-Guía completa, con cómo funciona por dentro y la solución de problemas: [`docs/APP.md`](docs/APP.md).
+<sub>Capturas con datos de ejemplo: direcciones de documentación y una MAC inventada. No muestran ninguna red real.</sub>
 
-La aplicación está pensada también para **aprender**: cada tipo de tráfico y cada término se explica en palabras
-simples, y hay un glosario integrado. Solo observa el tráfico del dispositivo; no lee su contenido (casi todo va cifrado).
+---
 
-## Instalación
+## ¿Por qué existe?
 
-Funciona en Windows, Linux y macOS. El modo visita (captura con hotspot) está pensado para **Windows**.
+Los dispositivos baratos y sin certificar, sobre todo los **TV box Android genéricos**, a veces salen de fábrica comprometidos. Su dueño no nota nada: el video funciona con normalidad mientras el aparato, a escondidas, recibe órdenes de un servidor remoto y **ataca a otros desde su conexión**. Para el proveedor de internet eso significa reputación dañada, reclamos de abuso y vecinos afectados.
 
-| Qué | Para qué | Cómo |
-|---|---|---|
-| **Python 3.8 o superior** | Ejecutar la herramienta (siempre) | [python.org/downloads](https://www.python.org/downloads/). En Windows, marca **"Add Python to PATH"** al instalar. Comprueba con `python --version`. |
-| **Esta herramienta** | El código | En esta página pulsa el botón verde **Code**, luego **Download ZIP**, y descomprime. O con Git: `git clone https://github.com/torvi10997/iot-botnet-lab.git` |
-| **Wireshark con TShark y Npcap** | Solo para capturar tráfico real (`visita`) | [wireshark.org/download](https://www.wireshark.org/download.html). Deja marcado **TShark** y acepta instalar **Npcap**. |
+Este proyecto nació de un caso real: un TV box con la depuración ADB abierta lanzaba inundaciones UDP a terceros desde la IP pública de un operador. La herramienta empaqueta lo aprendido para que cualquiera pueda **ver la evidencia con sus propios ojos** y **entender qué significa**.
 
-No hay que instalar nada más (no usa `pip`). Abre una terminal **dentro de la carpeta descomprimida** y ejecuta los comandos de abajo. En la mayoría de los equipos no hace falta ser administrador; si Npcap está limitado a administradores, la aplicación te lo avisa (botón **Requisitos**) y puedes usar `Abrir_app_administrador.bat`.
+## Qué puedes hacer con ella
 
-Comprueba la instalación con `python -m botnet_lab --help`: debe mostrar la lista de comandos.
+- **Ver el tráfico en vivo.** Quién es el dispositivo (nombre, MAC, fabricante), con quién habla, a qué ritmo y qué tipo de tráfico produce: video, web, mensajería, publicidad, juegos...
+- **Obtener un diagnóstico claro.** Un **semáforo** (rojo, amarillo, verde o no concluyente) que explica en palabras simples por qué, y qué hacer.
+- **Revisar los puertos abiertos.** Distingue un ADB **abierto sin clave** (la puerta de entrada de botnets como BADBOX y Kimwolf) de uno que pide autorización.
+- **Analizar capturas del router.** Carga una captura de un MikroTik u otro equipo y muestra **cientos de dispositivos a la vez, con los sospechosos primero**.
+- **Entregar un informe** en lenguaje simple al cliente, imprimible, con los puertos incluidos.
+- **Comprobar que todo está listo.** El botón **Requisitos** revisa Wireshark, Npcap, permisos y hotspot, y te guía para arreglar lo que falte.
+- **Aprender.** Cada tipo de tráfico y cada término se explica en palabras simples, con un glosario integrado.
+
+| Revisión de puertos | Informe para el cliente |
+|:---:|:---:|
+| ![Pestaña de puertos abiertos: Telnet y ADB sin clave de riesgo alto, con qué significa cada uno y qué hacer](docs/img/puertos-abiertos.png) | ![Informe en lenguaje simple con el semáforo en rojo, lo que se encontró y qué hacer](docs/img/informe-cliente.png) |
+
+## Cómo funciona
+
+```mermaid
+flowchart LR
+    D["Dispositivo<br/>TV box, cámara, teléfono"] -- WiFi --> H["Tu laptop<br/>hotspot de Windows"]
+    H -- cable de red --> I(("Internet"))
+    H -. copia de los paquetes .-> T["TShark + Npcap"]
+    T --> A["Revisor de red<br/>agrupa, explica y analiza"]
+    R["Captura del router<br/>(.pcap / .pcapng)"] -. o abrir archivo .-> A
+    A --> S{{"Semáforo"}}
+    A --> P["Puertos abiertos"]
+    A --> F["Informe para el cliente"]
+```
+
+1. **Tu laptop actúa como punto de acceso** (el hotspot de Windows). El dispositivo se conecta a él, así que todo su tráfico pasa por tu equipo, sin tocar el router del cliente.
+2. **TShark** copia los paquetes y la aplicación los lee al instante, los agrupa por dispositivo y aprende los nombres de los servidores a partir de las consultas DNS.
+3. Un **analizador** busca las huellas de un bot: inundaciones UDP sin respuesta, órdenes de un servidor de control, latidos regulares, consultas DNS sin sentido y barridos de puertos.
+4. Todo se resume en el **semáforo** y, si quieres, en un **informe**.
+
+La aplicación **solo observa**: no ataca, no modifica el dispositivo y no envía los datos capturados a ningún servidor. Como casi todo el tráfico va cifrado, ve *quién habla con quién, cuándo y cuánto*, pero **no el contenido** de los mensajes.
 
 ## Inicio rápido
 
-**Lo más fácil (Windows):** conecta el dispositivo al hotspot de tu laptop y haz doble clic en `Abrir_app.bat`.
+**Necesitas**, en un PC con Windows:
 
-**Con la terminal** (dentro de la carpeta de la herramienta):
+| Requisito | Cómo |
+|---|---|
+| **Python 3.8 o superior** | [python.org/downloads](https://www.python.org/downloads/). Marca **«Add Python to PATH»** al instalar |
+| **Wireshark con TShark y Npcap** | [wireshark.org/download](https://www.wireshark.org/download.html). Deja marcado **TShark** y acepta instalar **Npcap** |
+| **Esta herramienta** | Botón verde **Code → Download ZIP** y descomprime, o `git clone https://github.com/torvi10997/iot-botnet-lab.git` |
+
+No usa `pip` ni instala nada más. **Después:**
+
+1. **Enciende el hotspot** de Windows (*Configuración → Red e Internet → Zona con cobertura inalámbrica móvil*) y conecta el dispositivo que quieres revisar. Conviene que tu PC tenga internet **por cable**.
+2. **Doble clic en `Abrir_app.bat`.** Se abre la ventana de la aplicación.
+3. Pulsa **Iniciar captura**, pon el dispositivo en uso (por ejemplo, un video) y **deja correr 10 minutos o más**.
+
+Si algo falta, el botón **Requisitos** te lo dice y te ayuda a resolverlo. Guía completa: [`docs/APP.md`](docs/APP.md).
+
+<details>
+<summary><b>Usarla desde la terminal</b></summary>
 
 ```bash
-# Abrir la aplicación con ventana (captura en vivo)
-python -m botnet_lab app
-
-# Ver en la ventana una captura que ya tengas (por ejemplo, la de un router MikroTik)
-python -m botnet_lab app --abrir mi_captura.pcapng --gateway 192.168.88.1
-
-# Revisar un dispositivo conectado a tu hotspot en consola (captura 15 minutos y genera el informe)
-python -m botnet_lab visita --minutos 15
-
-# Analizar una captura real que ya tengas (pcap o pcapng)
-python -m botnet_lab analyze mi_captura.pcapng --device 192.168.1.50
-
-# Generar el informe con semáforo de una captura existente, sin capturar
-python -m botnet_lab visita --desde-captura mi_captura.pcapng
+python -m botnet_lab app                                   # la aplicación con ventana
+python -m botnet_lab app --abrir captura.pcapng            # ver una captura que ya tengas
+python -m botnet_lab app --abrir captura.pcapng --gateway 192.168.88.1   # indicando la IP del router
+python -m botnet_lab visita --minutos 15                   # revisar un dispositivo en consola y generar el informe
+python -m botnet_lab visita --desde-captura captura.pcapng # informe de una captura existente
+python -m botnet_lab analyze captura.pcapng --device 192.168.1.50   # análisis en texto o JSON (--json)
 ```
 
-Para visitas en campo lee [`docs/VISITA.md`](docs/VISITA.md).
-
 El código de salida es `2` si el veredicto es *sospechoso*, útil para scripts.
-
-## Seguridad de la propia aplicación
-
-La ventana es una página local que solo escucha en `127.0.0.1`. Exige un **secreto de sesión** (otro programa o usuario del PC no puede usarla), rechaza peticiones de otras webs, tiene límites de memoria frente a dispositivos hostiles y no envía datos a ningún servidor. Se revisó con pruebas de ataque y con datos hostiles: ver [`docs/SEGURIDAD.md`](docs/SEGURIDAD.md) (hallazgos, correcciones y límites) y [`SECURITY.md`](SECURITY.md) para reportar un problema. No es una auditoría de terceros.
+</details>
 
 ## Qué detecta
 
 | Código | Indicio | Por qué importa |
 |---|---|---|
-| `UDP_FLOOD` | Inundación UDP sostenida (por defecto ≥ 200 pps durante ≥ 5 s) con casi ninguna respuesta | Es el ataque en sí: tráfico unidireccional hacia un tercero |
+| `UDP_FLOOD` | Inundación UDP sostenida (por defecto ≥ 200 paquetes/s durante ≥ 5 s) con casi ninguna respuesta | Es el ataque en sí: tráfico unidireccional hacia un tercero. Una descarga normal (video por QUIC, por ejemplo) **no** se marca, porque el destino responde |
 | `C2_ORDER` | Un mensaje pequeño entrante justo antes (≤ 2 s) de que empiece la inundación | Delata al servidor de control que da la orden |
-| `BEACON` | Mensajes del mismo tamaño a intervalos regulares hacia un mismo destino (en puertos 80/443 solo informativo) | Latido del canal de control (en el caso real: 33 bytes, en pareja, cada 30 s) |
-| `DNS_RANDOM` | Consultas DNS con etiquetas largas y aleatorias (incluso binarias) directo a resolvers públicos | Sondeo de dominios del malware o ruido |
-| `DNS_BYPASS` | El equipo ignora el DNS del router | Informativo; muchos dispositivos lo hacen |
-| `SCAN` | Muchos destinos/puertos distintos con SYN en pocos segundos | Búsqueda de nuevas víctimas |
+| `BEACON` | Mensajes del mismo tamaño a intervalos regulares hacia un mismo destino | Latido del canal de control. En los puertos 80 y 443 solo se informa |
+| `DNS_RANDOM` | Consultas DNS con etiquetas largas y aleatorias (incluso binarias) directo a resolvers públicos | Sondeo de dominios del malware |
+| `DNS_BYPASS` | El dispositivo ignora el DNS del router | Informativo; muchos dispositivos lo hacen |
+| `SCAN` | Muchos destinos y puertos distintos con SYN en pocos segundos | Búsqueda de nuevas víctimas |
 
-Los umbrales se ajustan con `--min-pps`, `--min-secs` y `--local-net`. Ejemplo de resultado (direcciones de documentación, no son reales):
+Lo fuerte es la **combinación**: un latido por sí solo suele ser un falso positivo (notificaciones, apps), pero latido + orden + inundación casi nunca lo es. Ejemplo de resultado (direcciones de documentación):
 
 ```
 [ALTA] Inundación UDP desde 192.168.137.50 hacia 203.0.113.20:19132  (UDP_FLOOD)
     8850 paquetes en ~15 s (pico 600 pps, promedio 1190 B de datos), respuestas: 0%.
 [ALTA] Orden de control 198.51.100.10:6969 seguida de inundación a 203.0.113.20  (C2_ORDER)
-    Llegó un mensaje de 54 bytes 0.25 s antes de que empezara la inundación. ...
+    Llegó un mensaje de 54 bytes 0.25 s antes de que empezara la inundación.
 [MEDIA] Latido periódico 192.168.137.50 -> 198.51.100.10:6969  (BEACON)
 Veredicto: SOSPECHOSO
 ```
 
-## Validación
+Los umbrales se ajustan con `--min-pps`, `--min-secs` y `--local-net`.
 
-Se contrastó con capturas reales de un TV box infectado (reposo, en ataque y tras restablecer de fábrica): las tres capturas del equipo infectado salen *sospechosas* y la del restablecido, *sin indicios*. Es un solo caso, no un estudio; los umbrales pueden necesitar ajustes con otros equipos. Si lo pruebas con otro dispositivo, abre un issue con tus resultados (anonimizados).
+## ¿Para quién es?
 
-## Límites (léelos)
-
-- Es una **herramienta educativa y de triage**, no un antivirus ni un IDS. Un veredicto *sin indicios* en una captura corta no prueba que el equipo esté limpio: el malware puede estar callado durante minutos. Captura al menos 10 a 15 minutos, idealmente con el equipo en uso.
-- Un `BEACON` o un `DNS_BYPASS` por sí solos suelen ser falsos positivos (notificaciones, apps). Lo fuerte es la combinación: latido + orden + inundación.
-- Solo IPv4, TCP/UDP. Una captura cifrada (VPN, DoH) oculta parte de lo que se busca.
-- Un equipo hecho para evadir (tráfico muy bajo y lento) no será detectado.
-
-## Uso responsable
-
-Captura solo **redes y dispositivos propios o con autorización expresa** del dueño. Esta herramienta solo observa: no ataca ni genera tráfico hacia terceros. No publiques capturas reales sin quitar IP, MAC y datos personales.
+- **Técnicos y soportes de ISP:** confirmar con evidencia si un cliente tiene un dispositivo infectado antes de contactarlo, y entregarle un informe que entienda. Guía de visita en [`docs/VISITA.md`](docs/VISITA.md) y reglas para MikroTik en [`docs/MIKROTIK.md`](docs/MIKROTIK.md).
+- **Personas con un PC:** revisar el TV box o la cámara que compraron barato.
+- **Docentes y estudiantes:** una forma visible y concreta de entender qué produce un dispositivo cuando se conecta a una red.
 
 ## Documentación
 
-- [`docs/SEGURIDAD.md`](docs/SEGURIDAD.md): qué se revisó de la seguridad de la aplicación, qué se encontró y qué límites quedan.
-- [`docs/APP.md`](docs/APP.md): **guía completa de la aplicación**: cómo funciona, uso paso a paso, qué muestra cada parte de la pantalla, puertos abiertos, límites y solución de problemas.
-- [`docs/VISITA.md`](docs/VISITA.md): guía del técnico para revisar un dispositivo en casa del cliente (modo visita, semáforo, consentimiento).
-- [`docs/CAPTURA.md`](docs/CAPTURA.md): cómo capturar el tráfico de un TV box u otro dispositivo (hotspot en Windows, tshark).
-- [`docs/MIKROTIK.md`](docs/MIKROTIK.md): reglas de ejemplo para detectar y bloquear en RouterOS 7.
-- [`docs/RESPUESTA.md`](docs/RESPUESTA.md): qué hacer cuando encuentras uno (cliente, ISP, reporte).
+| Guía | Para qué |
+|---|---|
+| [`docs/APP.md`](docs/APP.md) | **Guía completa:** cómo funciona, uso paso a paso, qué muestra cada parte de la pantalla, puertos, límites y solución de problemas |
+| [`docs/VISITA.md`](docs/VISITA.md) | Guía del técnico para revisar un dispositivo en casa del cliente |
+| [`docs/CAPTURA.md`](docs/CAPTURA.md) | Cómo capturar el tráfico de un dispositivo (hotspot, tshark) |
+| [`docs/MIKROTIK.md`](docs/MIKROTIK.md) | Reglas de ejemplo para detectar y bloquear en RouterOS 7 |
+| [`docs/RESPUESTA.md`](docs/RESPUESTA.md) | Qué hacer cuando encuentras uno: cliente, ISP, reporte |
+| [`docs/SEGURIDAD.md`](docs/SEGURIDAD.md) | Qué se revisó de la seguridad de la aplicación, qué se encontró y qué límites quedan |
 
-## Pruebas
+## Seguridad y privacidad
+
+- La ventana es una página **local** (`127.0.0.1`) protegida por un **secreto de sesión**: otro programa, otro usuario del PC o una página web abierta en tu navegador no pueden usarla.
+- Frente a un dispositivo hostil tiene **límites de memoria**, y los datos de la red se muestran siempre como texto, nunca como código.
+- Cada cambio pasa **pruebas automáticas, Bandit y CodeQL**. La revisión de seguridad la hizo el autor con pruebas de ataque; **no es una auditoría de terceros**. Detalle en [`docs/SEGURIDAD.md`](docs/SEGURIDAD.md).
+- ¿Encontraste una vulnerabilidad? Repórtala en privado como indica [`SECURITY.md`](SECURITY.md).
+
+## Límites y uso responsable
+
+- **No es un antivirus ni un sistema de detección de intrusos.** Un *verde* significa «no se vieron señales en este tiempo», no «está limpio»: un dispositivo infectado puede estar callado un buen rato. Por eso la herramienta nunca da verde con menos de 10 minutos de captura.
+- **Un solo caso real de calibración** (un TV box genérico infectado y un teléfono sano). Con otros dispositivos pueden aparecer falsos positivos o pasar algo por alto. Si lo pruebas, abre un *issue* con tus resultados anonimizados.
+- Solo **IPv4**, TCP y UDP. Un dispositivo hecho para evadir (tráfico muy bajo y lento) puede no ser detectado.
+- La captura en vivo con hotspot es para **Windows**; el análisis de capturas funciona en cualquier sistema con Python.
+- **Captura únicamente redes y dispositivos propios o con autorización expresa** de su dueño, y avísale antes. No publiques capturas ni informes reales sin quitar IP, MAC y datos personales.
+
+## Desarrollo
 
 ```bash
-python -m unittest discover -s tests -v
+python -m unittest discover -s tests -v    # más de 60 pruebas automáticas
 ```
 
-Las pruebas usan una utilería interna que genera tráfico sintético (`tests/emulador_pruebas.py`); no forma parte de la herramienta.
+Las pruebas usan un generador de tráfico sintético interno (`tests/emulador_pruebas.py`); no forma parte de la herramienta. El código es Python estándar, sin dependencias, repartido en `botnet_lab/` (servidor y estado en vivo, analizador, lector de capturas, revisión de puertos, requisitos e informe) más la interfaz en `botnet_lab/web/`.
 
-## Contribuir
-
-Ideas bienvenidas: detección de más familias, soporte IPv6, reglas para otros routers (OpenWrt, pfSense, Ubiquiti), traducciones. Abre un issue o un pull request. Las capturas reales de ejemplo deben estar anonimizadas.
+**Ideas bienvenidas:** detección de más familias de bots, soporte IPv6, reglas para otros routers (OpenWrt, pfSense, Ubiquiti), prueba de reposo guiada y traducciones. Abre un *issue* o un *pull request*; las capturas de ejemplo deben estar anonimizadas.
 
 ## Licencia
 
-MIT, ver [`LICENSE`](LICENSE).
+[MIT](LICENSE).
+
+---
+
+<details>
+<summary><b>English summary</b></summary>
+
+**Revisor de red** (`iot-botnet-lab`) is a free, dependency-free Python tool (UI in Spanish) that shows **live** what a device on your network is doing and whether it behaves like an **IoT botnet bot** (typically a cheap generic Android TV box). A Windows laptop acts as a hotspot, `tshark` copies the packets, and the app groups them per device, explains them in plain language, flags UDP floods without replies, command-and-control orders and beacons, random DNS, and port scans, and gives a traffic-light verdict plus a customer-ready report. It also checks a device's open ports (e.g. ADB without authentication) and can open router captures (`.pcap`/`.pcapng`) with hundreds of devices, suspicious ones first.
+
+It only observes: it does not attack, and captured data never leaves your machine. It is **not an antivirus**, was calibrated on a single real case, and has not been audited by third parties (see `docs/SEGURIDAD.md`). Use it only on networks and devices you own or are authorized to test.
+
+Quick start: install Python 3.8+ and Wireshark (with TShark and Npcap), turn on the Windows hotspot, connect the device, double-click `Abrir_app.bat`, press **Iniciar captura** and let it run for 10+ minutes.
+</details>
